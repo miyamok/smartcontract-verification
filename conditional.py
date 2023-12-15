@@ -64,7 +64,7 @@ class Conditional:
                 print(c)
                 return 0
         elif c['nodeType'] == 'UnaryOperation':
-            sub = self.conditionToFormula(c['subExpression'])
+            sub = self.expressionToTerm(c['subExpression'])
             op = c['operator']
             if op == '!':
                 return Not(sub)
@@ -153,48 +153,53 @@ class Conditional:
         #     falseBody = c['falseBody']
         return [condExpr, Not(condExpr)]
 
-    def conditionToFormula(self, c):
-        #print(c.items())
-        #print(c.keys())
-        #print(c['nodeType'])
-        if c['nodeType'] in ['Identifier', 'Literal', 'TupleExpression']:
-            return self.expressionToTerm(c)
-        op = c['operator']
-        nt = c['nodeType']
-        if nt == 'UnaryOperation':
-            sub = self.conditionToFormula(c['subExpression'])
-            if op == '!':
-                return Not(sub)
-            else:
-                print ('unknown operator: ' + op + ' at src ' + c['src'])
-                exit()
-        elif nt == 'BinaryOperation':
-            lft = self.conditionToFormula(c['leftExpression'])
-            rht = self.conditionToFormula(c['rightExpression'])
-            if op == '&&':
-                # print(lft)
-                # print(rht)
-                return And(lft, rht)
-            elif op == '||':
-                return Or(lft, rht)
-            elif op == '==':
-                return lft == rht
-            elif op == '<':
-                return lft < rht
-            elif op == '>':
-                return lft > rht
-            elif op == '<=':
-                ## check if <= is a correct one in solc AST
-                return lft <= rht
-            elif op == '>=':
-                ## check if >= is a correct one in solc AST
-                return lft >= rht
-            else:
-                print ('unknown operator: ' + op + ' at src ' + c['src'])
-                exit()
-        else:
-            print ('unknown nodeType: ' + nt + ' at src ' + c['src'])
-            exit()
+    # def conditionToFormula(self, c):
+    #     #print(c.items())
+    #     #print(c.keys())
+    #     #print(c['nodeType'])
+    #     if c['nodeType'] in ['Identifier', 'Literal', 'TupleExpression']:
+    #         return self.expressionToTerm(c)
+    #     op = c['operator']
+    #     nt = c['nodeType']
+    #     if nt == 'UnaryOperation':
+    #         sub = self.conditionToFormula(c['subExpression'])
+    #         if op == '!':
+    #             return Not(sub)
+    #         else:
+    #             print ('unknown operator: ' + op + ' at src ' + c['src'])
+    #             exit()
+    #     elif nt == 'BinaryOperation':
+    #         lft = self.conditionToFormula(c['leftExpression'])
+    #         rht = self.conditionToFormula(c['rightExpression'])
+    #         if op == '&&':
+    #             # print(lft)
+    #             # print(rht)
+    #             return And(lft, rht)
+    #         elif op == '||':
+    #             return Or(lft, rht)
+    #         elif op == '==':
+    #             return lft == rht
+    #         elif op == '<':
+    #             return lft < rht
+    #         elif op == '>':
+    #             return lft > rht
+    #         elif op == '<=':
+    #             ## check if <= is a correct one in solc AST
+    #             return lft <= rht
+    #         elif op == '>=':
+    #             ## check if >= is a correct one in solc AST
+    #             return lft >= rht
+    #         else:
+    #             print ('unknown operator: ' + op + ' at src ' + c['src'])
+    #             exit()
+    #     else:
+    #         print ('unknown nodeType: ' + nt + ' at src ' + c['src'])
+    #         exit()
 
     def booleanExpressionToFormula(self, e):
         pass
+
+    def sat(self, e):
+        s = Solver()
+        s.add(e)
+        return s.check()
