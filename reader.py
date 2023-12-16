@@ -2,6 +2,7 @@ import sys
 import pprint
 import json
 from subprocess import Popen, PIPE
+import traceback
 
 sys.path.append('/Library/Frameworks/Python.framework/Versions/3.6/lib/python3.6/site-packages/')
 from solidity_parser import parser
@@ -41,7 +42,12 @@ class ReaderSolc:
         (self.output, self.err) = process.communicate()
         self.exit_code = process.wait()
         self.outputBodyStr = self.output.decode('utf-8').split('\n')[-1]
-        self.jsonObj = json.loads(self.outputBodyStr)
+        try:
+            self.jsonObj = json.loads(self.outputBodyStr)
+        except json.decoder.JSONDecodeError as e:
+            print("solc compiler detected a problem in the given source code.")
+            exit()
+
         with open(filepath, "r") as f:
             self.sourceText = f.read()
 
