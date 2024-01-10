@@ -56,3 +56,4 @@ On the other hand, the reachability of <code>f1()</code> is checked due to the s
 # To do
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
+- Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
