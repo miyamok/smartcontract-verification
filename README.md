@@ -72,6 +72,16 @@ nums[x] = 61;
 The last substitution is out of bound, as the size of the array <code>nums</code> is 3, hence it causes a run-time error.
 This problem should be statically detected, and it is feasible due to known program analysis techniques.
 
+## Struct
+Variables ranging over array and struct has a modifier such as memory, storage, or calldata, in order to indicate how those data are kept.
+Data on memory are not permanent, and changes are lost, as an example below, when the execution got out from the function scope.
+```
+function processData(account a) external {
+    Data memory d = getData(a);
+    d.processed = true;
+}
+```
+
 # To do
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
