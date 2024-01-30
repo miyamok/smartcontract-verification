@@ -69,7 +69,7 @@ nums[1] = 50;
 nums[2] = 121;
 nums[x] = 61;
 ```
-The last substitution is out of bound, as the size of the array <code>nums</code> is 3.
+The last substitution is out of bound, as the size of the array <code>nums</code> is 3, hence it causes a run-time error.
 This problem should be statically detected, and it is feasible due to known program analysis techniques.
 
 # To do
