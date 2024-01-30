@@ -1,3 +1,5 @@
+This note is a preliminary memo for the project.
+
 # Smartcontract Verification
 The objective of this project is to develop software to practice formal verification of smart contracts.
 Due to the immutability of blockchain, the correctness of smart contract code is a crucial issue to secure crypto assets, because a flaw of a source code makes the smart contract vulnerable. 
@@ -52,6 +54,23 @@ if (b1 && (x == (b2 ? y : z)) {
 ```
 The reachability of <code>y</code> is checked by the satisfiability of <code>b1 && b2</code>, and the one of <code>z</code> is by <code>b1 && !b2</code>
 On the other hand, the reachability of <code>f1()</code> is checked due to the satisfiability of <code>b1 && ((b2 && x==y) || (!b2 && x==z))</code>, and by its negation, the one of <code>f2()</code> is checked.
+
+## Arrays
+Solidity offers both statically sized arrays and dynamically sized arrays.
+
+### Examples
+Consider the following code, assuming solidity version is 0.8.20 or older.
+```
+uint256[3] nums;
+uint256 x = 3;
+
+nums[0] = 20;
+nums[1] = 50;
+nums[2] = 121;
+nums[x] = 61;
+```
+The last substitution is out of bound, as the size of the array <code>nums</code> is 3.
+This problem should be statically detected, and it is feasible due to known program analysis techniques.
 
 # To do
 - Explaining basic logic and the satisfiability problem
