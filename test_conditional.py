@@ -8,7 +8,7 @@ parser = OptionParser()
 (options, args) = parser.parse_args()
 ##r.load("sample-solidity/if-then-else.sol")
 if len(args) != 1:
-    print("one argument required for the input file name.  abort.")
+    print("one argument required for the input .sol file name.  abort.")
     exit()
 filepath = args[0]
 if not os.path.exists(filepath):
