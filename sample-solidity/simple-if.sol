@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 contract SimpleIf {
 
     function foo(uint x) public pure returns (uint) {
+        uint y = 100;
 
         if (!(x==10)) {
             // What to check is the satisfiability of
