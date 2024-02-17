@@ -1,0 +1,63 @@
+cabal-version:      2.4
+name:               solidity-verification
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             miyamok
+maintainer:         58558301+miyamok@users.noreply.github.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+executable solidity-verification
+    main-is:          Main.hs
+
+    -- Modules included in this executable, other than Main.
+    other-modules:
+        Reader,
+        Parser
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:    base ^>=4.16.4.0,
+    		      json ^>=0.11,
+		      aeson ^>=2.2.1.0,
+              shelly ^>=1.12.1,
+              base-compat-batteries,
+              process,
+              containers,
+                bytestring, text, unordered-containers
+
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+executable aeson-example-simplest
+    default-language: Haskell2010
+    main-is:          Simplest.hs
+    hs-source-dirs:   ./
+    ghc-options:      -Wall
+    build-depends: aeson
+                , base                   >=0 && <5
+                , base-compat-batteries
+                , bytestring
+
+executable makea
+    default-language: Haskell2010
+    main-is:          makea.hs
+    hs-source-dirs:   ./app
+    ghc-options:      -Wall
+    build-depends: shelly, base
