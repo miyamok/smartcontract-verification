@@ -1,19 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE RecordWildCards #-}
-
 
 module Main where
-import Reader
-import Parser
-import Data.Aeson
-import Prelude.Compat
+import System.Directory.Internal.Prelude (getArgs)
+import Reader ( reader )
+import Parser ( parse )
+import Data.Aeson ()
+import Prelude.Compat ( print, head, IO, String, map, putStrLn )
+import Text.JSON ()
+import Data.Text ( Text, pack )
 
-import Text.JSON
--- import qualified Data.Text.Lazy.IO as T
--- import qualified Data.Text.Lazy.Encoding as T
+argsToOptsAndFilename :: [Text] -> ([Text], [Text])
+argsToOptsAndFilename args = ([], args)
 
 main :: IO ()
-main = do r <- reader "./sample-solidity/first.sol"
-          let req = parse r
-          print req
+main = do args <- getArgs
+          let (opts, files) = argsToOptsAndFilename (map pack args)
+          case files of
+            [] -> putStrLn "Error: No .sol file name given"
+            _ -> do t <- reader (head files)
+                    let mv = parse t
+                    print mv

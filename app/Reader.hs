@@ -1,33 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Reader where
-import Shelly
-import Data.Text as T
 
+module Reader where
+import Shelly ( run, shelly, silently )
+import Data.Text as T ( Text, lines, unlines )
+import Control.Monad.IO.Class (MonadIO)
+
+reader :: MonadIO m => Text -> m Text
 reader filename = shelly $ silently $ do
     ret <- run "solc" ["--ast-compact-json", filename]
-    let cleanAST = cleaningSolcASTOutput ret
-    return cleanAST
+    return $ cleaningSolcASTOutput ret
 
 cleaningSolcASTOutput :: Text -> Text
-cleaningSolcASTOutput t = T.unlines $ Prelude.tail $ Prelude.tail $ Prelude.tail $ Prelude.tail $ T.lines t
-    
-
-
-
--- import System.Process
-
--- test = createProcess (proc "ls" [])
--- import Shelly
--- import Control.Applicative
--- import Control.Monad
-
--- convertEpub :: FilePath -> IO ()
--- convertEpub fname = undefined
-
--- test = shelly $ do
---     liftIO $ putStrLn "Hello, world!  I'm in Shelly"
---     --names <- Shelly.find (pure . Shelly.hasExt "hs") "."
---     fnames <- Shelly.find "*.hs"
---     liftIO $ forM_ fnames $ \fname -> do
---         putStrLn $ "Processing file " ++ show fname
---         convertEpub fname
+cleaningSolcASTOutput =
+    T.unlines . tail . tail . tail . tail . T.lines
