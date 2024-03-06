@@ -16,6 +16,10 @@ The final goal, the correctness of smartcontract, consists of pieces of correctn
 + No selfdestruct reacheability
 <!-- + guaranteeing <code>assert</code> and <code>require</code> -->
 
+## Features of the Solidity compiler
+The solidity compiler <code>solc</code> offers helpful features for preventing potential problems of smart contracts.
+Byte code compiled by <code>solc</code> version 0.8.4 or above equips the overflow checking, that is, when there was a runtime arithmetic overflow, it is automatically detected and the execution of the contract gets reverted.  In contract to it, the older <code>solc</code> did not offer this feature, and hence the runtime overflow could lead an unrecoverable failure such as a permanent loss of assets.
+
 # Abstract syntax tree by <code>solc</code>
 The official solidity compiler <code>solc</code> offers the option <code>--ast-compact-json</code> to output the abstract syntax tree in the JSON format.
 Our verification system relies on this feature of <code>solc</code>.
