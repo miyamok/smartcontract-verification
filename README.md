@@ -88,6 +88,37 @@ function processData(account a) external {
 A concrete case is found in the tutorial by Alchemy University (https://university.alchemy.com/overview/solidity), Section 3, Reference Types, Structs, around 20:00 in the video lecture.
 The problem shown in the lecture video is reproduced by modifying <code>storage</code> to <code>memory</code> at the line 34 of Example.sol in https://github.com/alchemyplatform/learn-solidity-presentations/blob/main/7-structs/examples/0-playing-with-structs/src/Example.sol
 
+# Tips
+## hardhat
+The following setup procedure is successsful
+```
+% mkdir myProject && cd myProject
+% npm install --save-dev hardhat
+% npm install @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
+% npm init -y
+% npx hardhat
+```
+The version of ethers is specified to be 5.7.2, because the latest version has an issue for smart contract deployment. (cf. https://ethereum.stackexchange.com/questions/144451/typeerror-cannot-read-properties-of-undefined-reading-jsonrpcprovider)
+The above installation works if @5.7.2 is missing.
+One should think about changing the ethers version in case there is a trouble such as below during the deployment.
+```
+% npx hardhat run scripts/deploy.js
+TypeError: Cannot read properties of undefined (reading 'JsonRpcProvider')
+    at main (/tmp/myProject/scripts/deploy.js:10:41)
+
+## The corresponding line of deploy.js:
+## const provider = new ethers.providers.JsonRpcProvider(url);
+```
+
+The following is an unsuccessful procedure (to figure out why)
+```
+% mkdir myProject && cd myProject
+% npm init -y
+% npm install --save-dev hardhat
+% npm install @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
+% npx hardhat
+```
+
 # To do
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
