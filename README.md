@@ -119,6 +119,34 @@ The following is an unsuccessful procedure (to figure out why)
 % npx hardhat
 ```
 
+## chai.js@^5.0.0 with hardhat
+
+In case there is an error such as follows,
+```
+% npx hardhat test
+Downloading compiler 0.8.4
+Compiled 1 Solidity file successfully (evm target: istanbul).
+An unexpected error occurred:
+
+Error [ERR_REQUIRE_ESM]: require() of ES Module /tmp/node_modules/chai/chai.js from /tmp/myProject/test/sample-test.js not supported.
+Instead change the require of chai.js in /tmp/myProject/test/sample-test.js to a dynamic import() which is available in all CommonJS modules.
+    at Object.<anonymous> (/tmp/myProject/test/sample-test.js:2:28) {
+  code: 'ERR_REQUIRE_ESM'
+}
+```
+downgrading chai.js to version 4 is a cure.
+```
+% npm install chai@4.3.7
+```
+Simply following the suggested solution by the error message, using import instead of require, does make another error.
+```
+TypeError: Cannot read properties of undefined (reading 'equal')
+      at Context.<anonymous> (test/sample-test.js:21:12)
+```
+It is further to investigate why the suggestion doesn't work.
+
+chai.js@5 is still new and seems not very stable.  A discussion is found at https://github.com/chaijs/chai/issues/1561 .
+
 # To do
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
