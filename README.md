@@ -89,6 +89,13 @@ A concrete case is found in the tutorial by Alchemy University (https://universi
 The problem shown in the lecture video is reproduced by modifying <code>storage</code> to <code>memory</code> at the line 34 of Example.sol in https://github.com/alchemyplatform/learn-solidity-presentations/blob/main/7-structs/examples/0-playing-with-structs/src/Example.sol
 
 # Tips
+
+## Static Verification Feature of Solidity Compiler solc
+
+solc has its own SMTChecker feature for compile time verification.
+In order to enable this feature, one use Linux for dynamic library loading (for z3 etc) or otherwise one has to re-compile the solc compiler with static library linking.
+Cf. https://github.com/ethereum/solidity/issues/14014
+
 ## hardhat
 The following setup procedure is successsful
 ```
