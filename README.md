@@ -70,7 +70,7 @@ function add(uint x_, uint y_) internal pure returns (uint z, uint) {
     z = x_ + y_;
 }
 ```
-and the function call <code>add(3, 1)</code> gives <code>(4, 0)</code>, filling the default value <code>0</code> of uint for the second return value.
+and the function call <code>add(3, 1)</code> gives <code>(4, 0)</code>, filling the default value <code>0</code> of uint for the second return value.  The same happens when the execution did not come to <code>return</code> even if there is <code>return</code> in the function body.  (a presence of conditional makes such a case probable.)
 ### Examples
 Assume a conditional statement (namely, if-then-else) with a boolean expression <code>b</code> (namely, <code>if (b) { ... }</code>), then the execusion reaches the <code>else</code> clause if not <code>b</code> holds.
 If either <code>b</code> or not <code>b</code> is unsatisfiable, the <code>then</code> clause or the <code>else</code> clause is never executed, namely, is unreachable.
