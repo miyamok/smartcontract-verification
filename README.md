@@ -93,6 +93,9 @@ The problem shown in the lecture video is reproduced by modifying <code>storage<
 ## Static Verification Feature of Solidity Compiler solc
 
 solc has its own SMTChecker feature for compile time verification.
+```
+% solc test.sol --model-checker-targets all --model-checker-timeout 1000 --model-checker-solvers z3  --model-checker-engine chc
+```
 In order to enable this feature, one use Linux for dynamic library loading (for z3 etc) or otherwise one has to re-compile the solc compiler with static library linking.
 Cf. https://github.com/ethereum/solidity/issues/14014
 
