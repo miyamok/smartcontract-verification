@@ -29,6 +29,48 @@ Solidity has two kinds of conditionals, namely, <code>if</code>-statement and th
 In the <code>then</code> clause, the verification process carries on assuming the condition holds, while the negation of the condition is taken in the verification of the <code>else</code> clause.
 One target of the verification is detecting an unreachable code segment.
 
+## Functions
+
+A function definition comes inside a contract definition and it involves specifications for its name, parameters, return values, modifiers, and its body.
+```
+function f(uint8 x, uint8 y) public pure returns (uint16) {
+    uint16 ret;
+    // ...
+    // ...
+    return ret;
+}
+```
+The above function has the name <code>f</code>, the parameter list contains two parameters <code>uint8 x, uint8 y</code>, the return type list contains <code>uint16</code>, which is a singleton list for this particular example, and the modifier <code>public pure</code> which means that this function is publically accessible and doesn't access storage data, neither reading nor writing.
+Alternatively the return variable list can be used instead of the type list, specifying 
+```
+function f(uint8 x, uint8 y) public pure returns (uint16 z) {
+    z = x+y;
+}
+```
+The variable <code>z</code> of type <code>uint16</code> is supporsed to have a return value, assigned through the execution of the body of the function, <code>x+y</code> for this case.  Explicit <code>return</code> has a priority over the specified retuen variable name <code>z</code>. 
+```
+function f(uint8 x, uint8 y) public pure returns (uint16 z) {
+    z = 16;
+    return x+y;
+}
+```
+The result of <code>f(4, 3)</code> from the above definition is </code>7</code>, not <code>16</code>.
+This priority is same for functions returning several values with an incomplete variable name specification.
+<code>solc</code> (I tested on remix solc 0.8.24) compiles code containing the following function definition.
+```
+function add(uint x_, uint y_) internal pure returns (uint z, uint) {
+    return (x_ + y_, 10);
+}
+```
+Note that the first element of the return values comes with a variable name but the second one is without a variable name.
+This function returns <code>(8, 10)</code> for <code>add(3, 5)</code>, while <code>z</code> should have the default value <code>0</code>.
+In case <code>return</code> is missing as follows, <code>solc</code> gives a warinng message but it anyway compiles,
+```
+function add(uint x_, uint y_) internal pure returns (uint z, uint) {
+    z = x_ + y_;
+}
+```
+and the function call <code>add(3, 1)</code> gives <code>(4, 0)</code>, filling the default value <code>0</code> of uint for the second return value.
 ### Examples
 Assume a conditional statement (namely, if-then-else) with a boolean expression <code>b</code> (namely, <code>if (b) { ... }</code>), then the execusion reaches the <code>else</code> clause if not <code>b</code> holds.
 If either <code>b</code> or not <code>b</code> is unsatisfiable, the <code>then</code> clause or the <code>else</code> clause is never executed, namely, is unreachable.
