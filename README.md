@@ -71,6 +71,7 @@ function add(uint x_, uint y_) internal pure returns (uint z, uint) {
 }
 ```
 and the function call <code>add(3, 1)</code> gives <code>(4, 0)</code>, filling the default value <code>0</code> of uint for the second return value.  The same happens when the execution did not come to <code>return</code> even if there is <code>return</code> in the function body.  (a presence of conditional makes such a case probable.)
+
 ### Examples
 Assume a conditional statement (namely, if-then-else) with a boolean expression <code>b</code> (namely, <code>if (b) { ... }</code>), then the execusion reaches the <code>else</code> clause if not <code>b</code> holds.
 If either <code>b</code> or not <code>b</code> is unsatisfiable, the <code>then</code> clause or the <code>else</code> clause is never executed, namely, is unreachable.
@@ -130,6 +131,24 @@ function processData(account a) external {
 A concrete case is found in the tutorial by Alchemy University (https://university.alchemy.com/overview/solidity), Section 3, Reference Types, Structs, around 20:00 in the video lecture.
 The problem shown in the lecture video is reproduced by modifying <code>storage</code> to <code>memory</code> at the line 34 of Example.sol in https://github.com/alchemyplatform/learn-solidity-presentations/blob/main/7-structs/examples/0-playing-with-structs/src/Example.sol
 
+## <code>return</code>
+
+The <code>nodeType</code> of <code>return</code> in the AST output of solc is <code>"Return"</code>, while in the grammer the corresponding rule is return-statement (cf. https://docs.soliditylang.org/en/latest/grammar.html#a4.SolidityParser.returnStatement).
+The AST output is in principle following the grammer definition, just using the CamelCase instead of the hyphen-separation, but it's not always the case and should be checked through the actual output AST from solc.
+
+## assert, require, revert
+
+assert and require are always function, so the nodeType of those statements are ExpressionStatement.
+revert in Solidity ^0.8.0 is either a function or a statement.  In case it comes with a string argument such as
+```
+revert "Error.  Abort.";
+```
+it is a function call and the nodeType of this statement is ExpressionStatement.
+If revert takes an Error object,
+```
+revert MyCustomError("Error, Aborted.", 121731);
+```
+the nodeType of this statement is RevertStatement.
 # Tips
 
 ## Static Verification Feature of Solidity Compiler solc
