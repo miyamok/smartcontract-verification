@@ -18,9 +18,11 @@ import qualified Data.ByteString.Lazy as LB
 import Data.Text.Encoding as TSE
 import Data.IntSet.Lens
 import qualified Data.Aeson.Key as LB
-import Profile (absolutePath, functionDefinitions, contracts, contractNameAndFunctionNameToBody, contractNameToVariableDeclarations, contractNameToFunctionDefinitions, contractNameToFunctionNames, contractNameAndFunctionNameToArgumentVariableNames, contractNameAndFunctionNameToArgumentTypes, contractNameAndFunctionNameToReturnVariableNames, contractNameAndFunctionNameToReturnTypes, blocksToCFGMatrices, blockToCFGMatrices)
-import Data.Aeson.Encode.Pretty
+-- import Profile (absolutePath, contractToEventDefinitions, functionDefinitions, contracts, contractNameAndFunctionNameToBody, contractNameToVariableDeclarations, contractNameToFunctionDefinitions, contractNameToFunctionNames, contractNameAndFunctionNameToArgumentVariableNames, contractNameAndFunctionNameToArgumentTypes, contractNameAndFunctionNameToReturnVariableNames, contractNameAndFunctionNameToReturnTypes, contractToFunctionDefinitions, functionDefinitions, functionDefinitionToName, contractToContractName, functionDefinitionToName, variableDeclarationToName, variableDeclarationToName, contractToVariableDeclarations, eventDefinitionToName, contractToStructDefinitions, structDefinitionToName, contractToEnumDefinitions, enumDefinitionToName, contractToErrorDefinitions, errorDefinitionToName, printContractProfile, functionToBodyStatements)
+import Profile
+-- import Data.Aeson.Encode.Pretty
 import Data.Text.Lazy.Encoding as TLE
+import Data.Foldable (for_)
 
 argsToOptsAndFilename :: [Text] -> ([Text], [Text])
 argsToOptsAndFilename args = ([], args)
@@ -42,18 +44,51 @@ main = do args <- getArgs
                     --print $ contractTofunctionDefinitions c
 
                     --putStrLn $ encodePretty $ t ^.. _Value-- ^.. _Value
-                    print $ contractNameToVariableDeclarations t "Counter"
-                    print $ contractNameToFunctionDefinitions t "Counter"
-                    let functionNames = contractNameToFunctionNames t "Counter"
-                    print functionNames
-                    let functionRetTypes = contractNameAndFunctionNameToReturnTypes t "Counter" (unpack (head functionNames))
---                    print $ length functionRetTypes
-                    print functionRetTypes
-                    print $ contractNameAndFunctionNameToReturnVariableNames t "Counter" (unpack (head functionNames))
-                    let body = contractNameAndFunctionNameToBody t "Counter" (unpack (head functionNames))
-                    print $ blocksToCFGMatrices body
+--                     print $ contractNameToVariableDeclarations t "Counter"
+--                     print $ contractNameToFunctionDefinitions t "Counter"
+--                     let functionNames = contractNameToFunctionNames t "Counter"
+--                     print functionNames
+--                     let functionRetTypes = contractNameAndFunctionNameToReturnTypes t "Counter" (unpack (head functionNames))
+-- --                    print $ length functionRetTypes
+--                     print functionRetTypes
+--                     print $ contractNameAndFunctionNameToReturnVariableNames t "Counter" (unpack (head functionNames))
+--                     let body = contractNameAndFunctionNameToBody t "Counter" (unpack (head functionNames))
+--                     print $ blocksToCFGMatrices body
                     --print $ length $ blocksToCFGMatrices body
+                    let cs = contracts t
+                    let cNames = map contractToContractName cs
+                    --print $ head cs
+                    print cNames
+                    let functionsList = map contractToFunctionDefinitions cs
+                    --print $ functionToBodyStatements (head $ head functionsList)
+                    --let cfg = functionToCFGNodes (head $ head functionsList)
+                    --print cfg
+                    let fstats = functionToStatements (head $ head functionsList)
+                    print $ length fstats
+                    let cfgs = statementsToCFGEdgesList fstats
+                    print $ length cfgs
+                    print $ map simplifyCFGEdges cfgs
+                    let functionNamesList = map (map functionDefinitionToName) functionsList
+                    print functionNamesList
+                    let vDecs = map contractToVariableDeclarations cs
+                    let vDecNames = map (map variableDeclarationToName) vDecs
+                    print vDecNames
+                    let events = contractToEventDefinitions $ head cs
+                    --print events
+                    let eventNames = map eventDefinitionToName events
+                    print eventNames
+                    let structs = contractToStructDefinitions $ head cs
+                    let structNames = map structDefinitionToName structs
+                    print structNames
+                    let enums = contractToEnumDefinitions $ head cs
+                    let enumNames = map enumDefinitionToName enums
+                    print enumNames
 
+                    let errs = contractToErrorDefinitions $ head cs
+                    let errNames = map errorDefinitionToName errs
+                    print errNames
+
+                    for_ cs printContractProfile
                     -- let functionArgTypes = contractNameAndFunctionNameToArgumentTypes t "Counter" (unpack (head functionNames))
                     -- print $ length functionArgTypes
                     -- print functionArgTypes
