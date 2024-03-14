@@ -11,6 +11,8 @@ contract SimpleIf {
             // 1. Not(x==10)
             // 2. Not(Not(x==10))
             return 1;
+        } else {
+            y += 100;
         }
         // Here the true case of the above conditional has return inside,
         // hence we assume (Not (Not (x==10))) in the rest of analysis.

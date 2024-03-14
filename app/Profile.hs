@@ -232,13 +232,18 @@ followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId (stat:stats) es e
                                 in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
     | nt == "Return" = let es' = es ++ [(stat, id, [])]
                        in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "IfStatement" = let es' = es ++ [(stat, id, nextNodeIdList)]
-                                trueCaseStatements = stat ^.. key "trueBody" . key "statements" . values
+    | nt == "IfStatement" = let trueCaseStatements = stat ^.. key "trueBody" . key "statements" . values
                                 falseCaseStatements = traceShowId $ stat ^.. key "falseBody" . key "statements" . values
                                 trueCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId trueCaseStatements [] []
                                 falseCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId falseCaseStatements [] []
-                                ess' = if null $ stat ^.. filtered (has (key "falseBody")) then ess ++ trueCaseCFGEdges
-                                        else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
+                                -- ess' = if null $ stat ^.. filtered (has (key "falseBody")) then ess ++ trueCaseCFGEdges
+                                --         else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
+                                -- es' = es ++ [(stat, id, nextNodeIdList)]
+                                withoutFalseBody = null $ stat ^.. filtered (has (key "falseBody"))
+                                (es', ess') = if withoutFalseBody
+                                    then (es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)], ess ++ trueCaseCFGEdges)
+                                    else (es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])], ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges)
+                                -- es' = es ++ [(stat, id, nextNodeIdList)]
                             in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess'
     | otherwise = let es' = es ++ [(stat, id, ["END"])]
                   in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
