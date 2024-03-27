@@ -2,7 +2,21 @@
 pragma solidity ^0.8.0;
 
 contract Counter {
-    uint public count;
+    uint public count = f(1)==1 ? 4 : 0;
+    event FunctionCalled();
+    uint[] public counters;
+
+    error CustomError();
+    function f(uint8 x) public returns (uint16 z) {
+        uint y=x++;
+        while (++y>0) {
+            y -= 1;
+            //x += y;
+        }
+        z=x+1;
+        counters[x] += z;
+        z+=x;
+    }
 
     // Function to get the current count
     function get() public view returns (uint) {

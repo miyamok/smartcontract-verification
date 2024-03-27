@@ -23,6 +23,7 @@ import Profile
 -- import Data.Aeson.Encode.Pretty
 import Data.Text.Lazy.Encoding as TLE
 import Data.Foldable (for_)
+import LiveVariables
 
 argsToOptsAndFilename :: [Text] -> ([Text], [Text])
 argsToOptsAndFilename args = ([], args)
@@ -63,11 +64,11 @@ main = do args <- getArgs
                     --print $ functionToBodyStatements (head $ head functionsList)
                     --let cfg = functionToCFGNodes (head $ head functionsList)
                     --print cfg
-                    let fstats = functionToStatements (head $ head functionsList)
-                    print $ length fstats
-                    let cfgs = statementsToCFGEdgesList fstats
-                    print $ length cfgs
-                    print $ map simplifyCFGEdges cfgs
+                    let fstatsList = map functionToStatements (head functionsList)
+                    print $ map length fstatsList
+                    let cfgsList = map statementsToCFGEdgesList fstatsList
+                    print $ length cfgsList
+                    print $ map (map simplifyCFGEdges) cfgsList
                     let functionNamesList = map (map functionDefinitionToName) functionsList
                     print functionNamesList
                     let vDecs = map contractToVariableDeclarations cs
@@ -87,8 +88,55 @@ main = do args <- getArgs
                     let errs = contractToErrorDefinitions $ head cs
                     let errNames = map errorDefinitionToName errs
                     print errNames
+                    let fct = head $ contractToFunctionDefinitions (head cs)
+                    print fct
+                    print $ functionDefinitionToParameterVariables fct
+                    print $ functionDefinitionToReturnVariables fct
+                    --for_ cs printContractProfile
+                    let block = functionToStatements fct
+                    --for_ block (print . nodeType)
+                    for_ block (print . statementToReadVariables)
+                    for_ block (print . statementToUpdatedVariables)
+                    -- let s = block !! 3
+                    -- -- --print $ expressionStatementToExpression s
+                    -- -- print $ expressionInFunctionCallFormToArguments $ expressionStatementToExpression s
+                    -- print $ statementToReadVariables s
+                    -- print s
+                    -- print $ statementToUpdatedVariables s
+                    -- -- print $ variableDeclarationStatementToDeclaredVariable $ head block
+                    -- let initValue = variableDeclarationStatementToInitialValue $ head block
+                    -- print initValue
+                    -- -- print $ expressionInBinaryOperationFormToExpressions initValue
+                    -- -- print $ map expressionInIdentifierFormToVariable $ expressionInBinaryOperationFormToExpressions initValue
+                    -- -- print $ head block
+                    -- -- print $ expressionToFreeVariables initValue
+                    -- let lastExpr = expressionStatementToExpression $ last block
+                    -- print lastExpr
+                    -- print $ expressionInAssignmentFormToUpdatedVariables lastExpr
+                    -- print $ expressionInAssignmentFormToReadVariables lastExpr
 
-                    for_ cs printContractProfile
+
+                    -- let headExpr = head block
+                    -- --print headExpr
+                    -- -- let lhs = expressionInAssignmentFormToLeftExpression headExpr
+                    -- -- print lhs
+                    -- -- print $ expressionInMemberAccessFormToVariable lhs
+                    -- -- print $ expressionInMemberAccessFormToMemberName lhs
+                    -- -- print $ expressionToFreeVariables lhs
+                    -- print $ variableDeclarationStatementToReadVariables headExpr
+                    -- print $ variableDeclarationStatementToUpdatedVariables headExpr
+                    
+                    -- let rhs = expressionInAssignmentFormToRightExpression headExpr
+                    -- print rhs
+                    -- print $ expressionInMemberAccessFormToVariable rhs
+                    -- print $ expressionInMemberAccessFormToMemberName rhs
+                    -- print $ expressionInAssignmentFormToReadVariables headExpr
+                    -- print $ expressionInAssignmentFormToUpdatedVariables headExpr
+
+                    --print (expressionToFreeVariables $ variableDeclarationStatementToInitialValue $ head block)
+                    -- --print $ head block
+                    -- print fct
+
                     -- let functionArgTypes = contractNameAndFunctionNameToArgumentTypes t "Counter" (unpack (head functionNames))
                     -- print $ length functionArgTypes
                     -- print functionArgTypes
