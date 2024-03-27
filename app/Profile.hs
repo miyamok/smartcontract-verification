@@ -17,6 +17,8 @@ type CFGMatrix = (Value, Int, [Int])
 type CFGNode = (Value, String, [String])
 -- to contract a Data.Graph via Data.Graph.graphFromEdges
 type CFGEdges = [CFGNode]
+type Variable = (String, String, String) -- name, type, and src (not the nameLocation!)
+type Environment = [Variable] -- reference to available variables
 
 absolutePath :: AsValue s => s -> Maybe Text
 absolutePath t = t ^? key "absolutePath" . _String
@@ -233,17 +235,19 @@ followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId (stat:stats) es e
     | nt == "Return" = let es' = es ++ [(stat, id, [])]
                        in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
     | nt == "IfStatement" = let trueCaseStatements = stat ^.. key "trueBody" . key "statements" . values
-                                falseCaseStatements = traceShowId $ stat ^.. key "falseBody" . key "statements" . values
+                                falseCaseStatements = stat ^.. key "falseBody" . key "statements" . values
                                 trueCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId trueCaseStatements [] []
                                 falseCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId falseCaseStatements [] []
-                                -- ess' = if null $ stat ^.. filtered (has (key "falseBody")) then ess ++ trueCaseCFGEdges
-                                --         else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
-                                -- es' = es ++ [(stat, id, nextNodeIdList)]
                                 withoutFalseBody = null $ stat ^.. filtered (has (key "falseBody"))
-                                (es', ess') = if withoutFalseBody
-                                    then (es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)], ess ++ trueCaseCFGEdges)
-                                    else (es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])], ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges)
-                                -- es' = es ++ [(stat, id, nextNodeIdList)]
+                                es' = if withoutFalseBody
+                                      then es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)]
+                                      else es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])]
+                                ess' = if withoutFalseBody
+                                       then ess ++ trueCaseCFGEdges
+                                       else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
+                                -- (es', ess') = if withoutFalseBody
+                                --     then (es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)], ess ++ trueCaseCFGEdges)
+                                --     else (es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])], ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges)
                             in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess'
     | otherwise = let es' = es ++ [(stat, id, ["END"])]
                   in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
@@ -257,7 +261,7 @@ functionToStatements t = t ^.. key "body" . key "statements" . values
 
 simplifyCFGEdges :: CFGEdges -> [(String, [String])]
 simplifyCFGEdges [] = []
-simplifyCFGEdges ((stat, id, ids):es) = (id, ids):(simplifyCFGEdges es)
+simplifyCFGEdges ((stat, id, ids):es) = (id, ids):simplifyCFGEdges es
 
 -- statementsToCFGNodes [] = []
 -- statementsToCFGNodes (stat:stats)
@@ -405,3 +409,123 @@ printContractProfile t = do putStrLn $ "Contract name: " ++ unpack cName
         es = map enumDefinitionToName $ contractToEnumDefinitions t
         errs = map errorDefinitionToName $ contractToErrorDefinitions t
         evs = map eventDefinitionToName $ contractToEventDefinitions t
+
+variableDeclarationStatementToDeclaredVariable :: AsValue s => s -> Variable
+variableDeclarationStatementToDeclaredVariable stat = (name, typeDescription, src)
+    where
+        name = unpack $ head $ stat ^.. key "declarations" . values . key "name" . _String
+        typeDescription = unpack $ head $ stat ^.. key "declarations" . values . key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ stat ^.. key "declarations" . values . key "src" . _String
+
+variableDeclarationStatementToInitialValue :: AsValue s => s -> Value
+variableDeclarationStatementToInitialValue stat = v
+    where
+        v = head $ stat ^.. key "initialValue"
+
+-- identifierExpressionToVariable :: AsValue s => s -> Variable
+-- identifierExpressionToVariable stat = (name, typeDescription, src)
+--     where
+--         name = unpack $ head $ stat ^.. key "name" . _String
+--         typeDescription = unpack $ head $ stat ^.. key "typeDescriptions" . _String
+--         src = unpack $ head $ stat ^.. key "src" . _String
+
+expressionInAssignmentFormToLeftExpression :: AsValue s => s -> Value
+expressionInAssignmentFormToLeftExpression stat = head $ stat ^.. key "leftHandSide"
+
+expressionInAssignmentFormToRightExpression :: AsValue s => s -> Value
+expressionInAssignmentFormToRightExpression stat = head $ stat ^.. key "rightHandSide"
+
+
+-- Duplicate elements should be removed
+expressionToFreeVariables :: AsValue s => s -> [Variable]
+expressionToFreeVariables stat
+ | nt == "Identifier" = [expressionInIdentifierFormToVariable stat]
+ | nt == "UnaryOperation" = expressionToFreeVariables (expressionInUnaryOperationFormToSubExpression stat)
+ | nt == "BinaryOperation" = concatMap expressionToFreeVariables (expressionInBinaryOperationFormToExpressions stat)
+ | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
+                             ie = expressionInIndexAccessFormToIndexExpression stat
+                            in expressionToFreeVariables be ++ expressionToFreeVariables ie
+ | nt == "MemberAccess" = maybeToList $ expressionInMemberAccessFormToVariable stat
+ | nt == "Literal" = []
+    where
+        nt = nodeType stat
+
+expressionInMemberAccessFormToMemberName :: AsValue s => s -> String
+expressionInMemberAccessFormToMemberName stat = unpack $ head $ stat ^.. key "memberName" . _String
+
+expressionInMemberAccessFormToVariable :: AsValue p => p -> Maybe Variable
+expressionInMemberAccessFormToVariable stat = if isEnum then Nothing else Just (name, typeDescription, src)
+    where
+        isEnum = False
+        name = unpack $ head $ stat ^.. key "expression" . key "name" . _String
+        typeDescription = unpack $ head $ stat ^.. key "expression" . key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ stat ^.. key "expression" . key "src" . _String
+
+expressionInIndexAccessFormToBaseExpression :: AsValue s => s -> Value
+expressionInIndexAccessFormToBaseExpression stat = head $ stat ^.. key "baseExpression"
+
+expressionInIndexAccessFormToIndexExpression :: AsValue s => s -> Value
+expressionInIndexAccessFormToIndexExpression stat = head $ stat ^.. key "indexExpression"
+
+expressionInIdentifierFormToVariable :: AsValue s => s -> Variable
+expressionInIdentifierFormToVariable stat =
+    let name = unpack $ head $ stat ^.. key "name" . _String
+        typeDescription = unpack $ head $ stat ^.. key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ stat ^.. key "src" . _String
+     in (name, typeDescription, src)
+
+expressionInBinaryOperationFormToExpressions :: AsValue s => s -> [Value]
+expressionInBinaryOperationFormToExpressions stat = lhs ++ rhs
+    where
+        lhs = stat ^.. key "leftExpression"
+        rhs = stat ^.. key "rightExpression"
+
+expressionInUnaryOperationFormToSubExpression :: AsValue s => s -> Value
+expressionInUnaryOperationFormToSubExpression stat = head $ stat ^.. key "subExpression"
+
+expressionInUnaryOperationFormToOperator :: AsValue s => s -> String
+expressionInUnaryOperationFormToOperator stat = unpack $ head $ stat ^.. key "operator" . _String
+
+functionDefinitionToParameterVariables :: AsValue s => s -> [Variable]
+functionDefinitionToParameterVariables stat = map (\v ->
+    let name = unpack $ head $ v ^.. key "name" . _String
+        typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ v ^.. key "src" . _String
+     in (name, typeDescription, src))
+    parameters
+    where
+        parameters = stat ^.. key "parameters" . key "parameters" . values
+
+functionDefinitionToReturnVariables :: AsValue s => s -> [Variable]
+functionDefinitionToReturnVariables stat = map (\v ->
+    let name = unpack $ head $ v ^.. key "name" . _String
+        typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ v ^.. key "src" . _String
+     in (name, typeDescription, src))
+    parameters
+    where
+        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
+
+-- NOTE: Variable declaration should be distinguished from variable use
+
+expressionStatementToExpression :: AsValue s => s -> Value
+expressionStatementToExpression stat = head $ stat ^.. key "expression"
+
+statementInWhileFormToConditionalExpression :: AsValue s => s -> Value
+statementInWhileFormToConditionalExpression stat = head $ stat ^.. key "condition"
+
+expressionInAssignmentFormToOperator :: AsValue s => s -> String
+expressionInAssignmentFormToOperator stat =unpack $ head $ stat ^.. key "operator" . _String
+
+-- An arithmetic operator is an operator such as +=, -=, where the left hand side of the assignemnt
+-- contributes to the assignment result by its own value.
+-- In this function, the argument is assumed to be some assignment operator, hence everything except
+-- "=" is an arithmetic assignment.
+isArithmeticAssignmentOperator :: String -> Bool
+isArithmeticAssignmentOperator = (/= "=")
+
+isIncrementOrDecrementOperator :: String -> Bool
+isIncrementOrDecrementOperator op = (op == "++") || (op == "--")
+
+expressionInFunctionCallFormToArguments :: AsValue s => s -> [Value]
+expressionInFunctionCallFormToArguments stat = stat ^.. key "arguments" . values
