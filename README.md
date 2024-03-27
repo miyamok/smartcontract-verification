@@ -23,6 +23,7 @@ Byte code compiled by <code>solc</code> version 0.8.4 or above equips the overfl
 # Abstract syntax tree by <code>solc</code>
 The official solidity compiler <code>solc</code> offers the option <code>--ast-compact-json</code> to output the abstract syntax tree in the JSON format.
 Our verification system relies on this feature of <code>solc</code>.
+The description of the solidity AST is available as https://solidity-ast.netlify.app/ .
 
 ## Conditionals
 Solidity has two kinds of conditionals, namely, <code>if</code>-statement and the ternary expression <code>b ? t : f</code>.
