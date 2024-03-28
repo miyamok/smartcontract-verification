@@ -23,6 +23,7 @@ Byte code compiled by <code>solc</code> version 0.8.4 or above equips the overfl
 # Abstract syntax tree by <code>solc</code>
 The official solidity compiler <code>solc</code> offers the option <code>--ast-compact-json</code> to output the abstract syntax tree in the JSON format.
 Our verification system relies on this feature of <code>solc</code>.
+The description of the solidity AST is available as https://solidity-ast.netlify.app/ .
 
 ## Conditionals
 Solidity has two kinds of conditionals, namely, <code>if</code>-statement and the ternary expression <code>b ? t : f</code>.
@@ -149,6 +150,14 @@ If revert takes an Error object,
 revert MyCustomError("Error, Aborted.", 121731);
 ```
 the nodeType of this statement is RevertStatement.
+
+## Proxy contract
+
+<code>delegatecall</code> is a function available for Contract.  It is to call a function of some contract on chain, delegating to the contract the parameters, such as msg.sender, the context etc.  A typical use case of this feature is to give a possibility of upgrading of smart contracts.  In the simplest scenario, Instead of a single smart contract, one creates two contracts, they are so-called the logic contract and the proxy contract.  The logic contract is in charge of the implementation of a business logic which could be upgraded in the future.  The proxy contract has a state variable which keeps the address of the implementation contract, and it invokes the corresponding business logic via <code>delegatecall</code>.  Upgrading of the business logic is done in two steps: deploying the new logic contract and changing the state variable of the proxy contract so that it points the new contract.
+
+### Question
+What happens if the implementation has been changed after the moment one called the proxy and before the moment the contract is actually executed.  If this change of the implementation is not detected, the contract can run differently from what is expected at the time to initiate the transaction, that arise a security concern.
+
 # Tips
 
 ## Static Verification Feature of Solidity Compiler solc
