@@ -3,6 +3,7 @@ module LiveVariables where
 import Data.Aeson
 import Data.Aeson.Lens
 import Profile
+import CFG
 import Data.Maybe
 import Debug.Trace
 

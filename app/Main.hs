@@ -23,6 +23,7 @@ import Profile
 -- import Data.Aeson.Encode.Pretty
 import Data.Text.Lazy.Encoding as TLE
 import Data.Foldable (for_)
+import CFG
 import LiveVariables
 
 argsToOptsAndFilename :: [Text] -> ([Text], [Text])
@@ -57,111 +58,129 @@ main = do args <- getArgs
 --                     print $ blocksToCFGMatrices body
                     --print $ length $ blocksToCFGMatrices body
                     let cs = contracts t
-                    let cNames = map contractToContractName cs
-                    --print $ head cs
-                    print cNames
-                    let functionsList = map contractToFunctionDefinitions cs
-                    --print $ functionToBodyStatements (head $ head functionsList)
-                    --let cfg = functionToCFGNodes (head $ head functionsList)
-                    --print cfg
-                    let fstatsList = map functionToStatements (head functionsList)
-                    print $ map length fstatsList
-                    let cfgsList = map statementsToCFGEdgesList fstatsList
-                    print $ length cfgsList
-                    print $ map (map simplifyCFGEdges) cfgsList
-                    let functionNamesList = map (map functionDefinitionToName) functionsList
-                    print functionNamesList
-                    let vDecs = map contractToVariableDeclarations cs
-                    let vDecNames = map (map variableDeclarationToName) vDecs
-                    print vDecNames
-                    let events = contractToEventDefinitions $ head cs
-                    --print events
-                    let eventNames = map eventDefinitionToName events
-                    print eventNames
-                    let structs = contractToStructDefinitions $ head cs
-                    let structNames = map structDefinitionToName structs
-                    print structNames
-                    let enums = contractToEnumDefinitions $ head cs
-                    let enumNames = map enumDefinitionToName enums
-                    print enumNames
+                    let c = head cs
+                    let vdecs = contractToStateVariableDeclarations c
+                    print vdecs
+                    -- print $ length vdecs
+                    -- --let fdefs = contractToFunctionDefinitions c
+                    -- let env = map variableDeclarationToVariable vdecs
+                    -- print env
+                    let fs = contractToFunctionDefinitions c
+                    let f = head fs
+                    let fn = functionDefinitionToName f
+                    print fn
+                    --print f
+                    let fstats = functionDefinitionToBodyStatements f
+                    print $ functionDefinitionToParameterVariables f
+                    let cfgs = contractToCFGEdgesList c
+                    print $ map simplifyCFGEdges cfgs
+                    --print cfgs
 
-                    let errs = contractToErrorDefinitions $ head cs
-                    let errNames = map errorDefinitionToName errs
-                    print errNames
-                    let fct = head $ contractToFunctionDefinitions (head cs)
-                    print fct
-                    print $ functionDefinitionToParameterVariables fct
-                    print $ functionDefinitionToReturnVariables fct
-                    --for_ cs printContractProfile
-                    let block = functionToStatements fct
-                    --for_ block (print . nodeType)
-                    for_ block (print . statementToReadVariables)
-                    for_ block (print . statementToUpdatedVariables)
-                    -- let s = block !! 3
-                    -- -- --print $ expressionStatementToExpression s
-                    -- -- print $ expressionInFunctionCallFormToArguments $ expressionStatementToExpression s
-                    -- print $ statementToReadVariables s
-                    -- print s
-                    -- print $ statementToUpdatedVariables s
-                    -- -- print $ variableDeclarationStatementToDeclaredVariable $ head block
-                    -- let initValue = variableDeclarationStatementToInitialValue $ head block
-                    -- print initValue
-                    -- -- print $ expressionInBinaryOperationFormToExpressions initValue
-                    -- -- print $ map expressionInIdentifierFormToVariable $ expressionInBinaryOperationFormToExpressions initValue
-                    -- -- print $ head block
-                    -- -- print $ expressionToFreeVariables initValue
-                    -- let lastExpr = expressionStatementToExpression $ last block
-                    -- print lastExpr
-                    -- print $ expressionInAssignmentFormToUpdatedVariables lastExpr
-                    -- print $ expressionInAssignmentFormToReadVariables lastExpr
+--                     let cNames = map contractToContractName cs
+--                     --print $ head cs
+--                     print cNames
+--                     let functionsList = map contractToFunctionDefinitions cs
+--                     --print $ functionToBodyStatements (head $ head functionsList)
+--                     --let cfg = functionToCFGNodes (head $ head functionsList)
+--                     --print cfg
+--                     let fstatsList = map functionToStatements (head functionsList)
+--                     print $ map length fstatsList
+--                     let cfgsList = map (\x -> statementsAndEnvironmentToCFGEdgesList x []) fstatsList
+--                     print $ length cfgsList
+--                     print $ map (map simplifyCFGEdges) cfgsList
+--                     let functionNamesList = map (map functionDefinitionToName) functionsList
+--                     print functionNamesList
+--                     let vDecs = map contractToVariableDeclarations cs
+--                     let vDecNames = map (map variableDeclarationToName) vDecs
+--                     print vDecNames
+--                     let events = contractToEventDefinitions $ head cs
+--                     --print events
+--                     let eventNames = map eventDefinitionToName events
+--                     print eventNames
+--                     let structs = contractToStructDefinitions $ head cs
+--                     let structNames = map structDefinitionToName structs
+--                     print structNames
+--                     let enums = contractToEnumDefinitions $ head cs
+--                     let enumNames = map enumDefinitionToName enums
+--                     print enumNames
+
+--                     let errs = contractToErrorDefinitions $ head cs
+--                     let errNames = map errorDefinitionToName errs
+--                     print errNames
+--                     let fct = head $ contractToFunctionDefinitions (head cs)
+--                     print fct
+--                     print $ functionDefinitionToParameterVariables fct
+--                     print $ functionDefinitionToReturnVariables fct
+--                     --for_ cs printContractProfile
+--                     let block = functionToStatements fct
+--                     --for_ block (print . nodeType)
+--                     --for_ block (print . statementToReadVariables)
+--                     --for_ block (print . statementToUpdatedVariables)
+--                     let s = block !! 2
+--                     -- -- --print $ expressionStatementToExpression s
+--                     -- -- print $ expressionInFunctionCallFormToArguments $ expressionStatementToExpression s
+--                     -- print $ statementToReadVariables s
+--                     print $ expressionInFunctionCallFormToArguments $ expressionStatementToExpression s
+--                     -- print $ statementToUpdatedVariables s
+--                     -- -- print $ variableDeclarationStatementToDeclaredVariable $ head block
+--                     -- let initValue = variableDeclarationStatementToInitialValue $ head block
+--                     -- print initValue
+--                     -- -- print $ expressionInBinaryOperationFormToExpressions initValue
+--                     -- -- print $ map expressionInIdentifierFormToVariable $ expressionInBinaryOperationFormToExpressions initValue
+--                     -- -- print $ head block
+--                     -- -- print $ expressionToFreeVariables initValue
+--                     -- let lastExpr = expressionStatementToExpression $ last block
+--                     -- print lastExpr
+--                     -- print $ expressionInAssignmentFormToUpdatedVariables lastExpr
+--                     -- print $ expressionInAssignmentFormToReadVariables lastExpr
 
 
-                    -- let headExpr = head block
-                    -- --print headExpr
-                    -- -- let lhs = expressionInAssignmentFormToLeftExpression headExpr
-                    -- -- print lhs
-                    -- -- print $ expressionInMemberAccessFormToVariable lhs
-                    -- -- print $ expressionInMemberAccessFormToMemberName lhs
-                    -- -- print $ expressionToFreeVariables lhs
-                    -- print $ variableDeclarationStatementToReadVariables headExpr
-                    -- print $ variableDeclarationStatementToUpdatedVariables headExpr
+--                     -- let headExpr = head block
+--                     -- --print headExpr
+--                     -- -- let lhs = expressionInAssignmentFormToLeftExpression headExpr
+--                     -- -- print lhs
+--                     -- -- print $ expressionInMemberAccessFormToVariable lhs
+--                     -- -- print $ expressionInMemberAccessFormToMemberName lhs
+--                     -- -- print $ expressionToFreeVariables lhs
+--                     -- print $ variableDeclarationStatementToReadVariables headExpr
+--                     -- print $ variableDeclarationStatementToUpdatedVariables headExpr
                     
-                    -- let rhs = expressionInAssignmentFormToRightExpression headExpr
-                    -- print rhs
-                    -- print $ expressionInMemberAccessFormToVariable rhs
-                    -- print $ expressionInMemberAccessFormToMemberName rhs
-                    -- print $ expressionInAssignmentFormToReadVariables headExpr
-                    -- print $ expressionInAssignmentFormToUpdatedVariables headExpr
+--                     -- let rhs = expressionInAssignmentFormToRightExpression headExpr
+--                     -- print rhs
+--                     -- print $ expressionInMemberAccessFormToVariable rhs
+--                     -- print $ expressionInMemberAccessFormToMemberName rhs
+--                     -- print $ expressionInAssignmentFormToReadVariables headExpr
+--                     -- print $ expressionInAssignmentFormToUpdatedVariables headExpr
 
-                    --print (expressionToFreeVariables $ variableDeclarationStatementToInitialValue $ head block)
-                    -- --print $ head block
-                    -- print fct
+--                     --print (expressionToFreeVariables $ variableDeclarationStatementToInitialValue $ head block)
+--                     -- --print $ head block
+--                     -- print fct
 
-                    -- let functionArgTypes = contractNameAndFunctionNameToArgumentTypes t "Counter" (unpack (head functionNames))
-                    -- print $ length functionArgTypes
-                    -- print functionArgTypes
-                    -- print $ contractNameAndFunctionNameToArgumentVariableNames t "Counter" (unpack (head functionNames))
+--                     -- let functionArgTypes = contractNameAndFunctionNameToArgumentTypes t "Counter" (unpack (head functionNames))
+--                     -- print $ length functionArgTypes
+--                     -- print functionArgTypes
+--                     -- print $ contractNameAndFunctionNameToArgumentVariableNames t "Counter" (unpack (head functionNames))
 
-                    -- print $ t ^.. key (fromString "nodes")
-                    -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . key (fromString "nodeType")
-                    -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . key (fromString "name") . _String
-                    -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . filtered (allOf (values.key (fromString "nodeType")) (has _String)) . values . key (fromString "name") ._String
-                    -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "FunctionDefinition"))) . key (fromString "name")._String
-                    -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "VariableDeclaration"))) . key (fromString "name")._String
-                    -- print $ t ^.. key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "ContractDefinition"))) . key (fromString "name")._String
+--                     -- print $ t ^.. key (fromString "nodes")
+--                     -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . key (fromString "nodeType")
+--                     -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . key (fromString "name") . _String
+--                     -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . filtered (allOf (values.key (fromString "nodeType")) (has _String)) . values . key (fromString "name") ._String
+--                     -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "FunctionDefinition"))) . key (fromString "name")._String
+--                     -- print $ t ^.. key (fromString "nodes") . values . key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "VariableDeclaration"))) . key (fromString "name")._String
+--                     -- print $ t ^.. key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "ContractDefinition"))) . key (fromString "name")._String
 
---contractDefinitions t = t ^.. key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "ContractDefinition")))
-                    -- case mv of Nothing -> print "empty!"
-                    --            Just v -> print $ v ^? key (fromString "absolutePath") ._String
+-- --contractDefinitions t = t ^.. key (fromString "nodes") . values . filtered (has (key (fromString "nodeType")._String.only (T.pack "ContractDefinition")))
+--                     -- case mv of Nothing -> print "empty!"
+--                     --            Just v -> print $ v ^? key (fromString "absolutePath") ._String
 
-          --                     --  Just v -> print $ do src <- v ^? key (fromString "src")
-          --                     --                       nodes <- v ^? key (fromString "nodes")
-          --                     --                       nodeType <- v ^? key (fromString "nodeType")
-          --                     --                       let srcs = v ^? values . key (fromString "src")
-          --                     --                       return src
-          --                                           --return $ show nodeType ++ " " ++ show src ++ ": " ++ show srcs
+--           --                     --  Just v -> print $ do src <- v ^? key (fromString "src")
+--           --                     --                       nodes <- v ^? key (fromString "nodes")
+--           --                     --                       nodeType <- v ^? key (fromString "nodeType")
+--           --                     --                       let srcs = v ^? values . key (fromString "src")
+--           --                     --                       return src
+--           --                                           --return $ show nodeType ++ " " ++ show src ++ ": " ++ show srcs
 
-          -- --           -- print mv
-          -- --           -- bs <- B.readFile $ (T.unpack (files !! 0))
-          -- --           -- let j = bs ^.. values.key (fromString "nodeType")._String
-          -- -- return
+--           -- --           -- print mv
+--           -- --           -- bs <- B.readFile $ (T.unpack (files !! 0))
+--           -- --           -- let j = bs ^.. values.key (fromString "nodeType")._String
+--           -- -- return

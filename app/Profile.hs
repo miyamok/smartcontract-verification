@@ -14,10 +14,8 @@ import Data.Maybe (maybeToList)
 import Debug.Trace
 
 type CFGMatrix = (Value, Int, [Int])
-type CFGNode = (Value, String, [String])
--- to contract a Data.Graph via Data.Graph.graphFromEdges
-type CFGEdges = [CFGNode]
-type Variable = (String, String, String) -- name, type, and src (not the nameLocation!)
+type VarName = String
+type Variable = (String, String, String) -- name, type, and src (pointing the declaration statement, but no nameLocation!)
 type Environment = [Variable] -- reference to available variables
 
 absolutePath :: AsValue s => s -> Maybe Text
@@ -66,12 +64,22 @@ contractNameAndFunctionNameToReturnVariableNames t contractName functionName =
 functionDefinitionToName :: AsValue s => s -> Text
 functionDefinitionToName t = head $ t ^.. key "name" . _String
 
-contractToVariableDeclarations :: AsValue s => s -> [Value]
+contractToStateVariableDeclarations :: AsValue s => s -> [Value]
 --contractToVariableDeclarations t = t ^.. key "nodes" . values . filtered (has (key "nodeType"._String.only "VariableDeclaration"))
-contractToVariableDeclarations = contractToDefinitionsOrDeclarations "VariableDeclaration"
+contractToStateVariableDeclarations = contractToDefinitionsOrDeclarations "VariableDeclaration"
 
-variableDeclarationToName :: AsValue s => s -> Text
-variableDeclarationToName = definitionOrDeclarationToName
+variableDeclarationToName :: AsValue s => s -> String
+variableDeclarationToName = unpack . definitionOrDeclarationToName
+
+variableDeclarationToType :: AsValue s => s -> String
+variableDeclarationToType = unpack . definitionOrDeclarationToType
+
+variableDeclarationToVariable :: AsValue s => s -> Variable
+variableDeclarationToVariable v = (n, t, s)
+    where
+        n = variableDeclarationToName v
+        t = variableDeclarationToType v
+        s = src v
 
 -- struct-definition, event-definition, enum-definition, constant-variable-declaration, error-definition
 
@@ -80,6 +88,9 @@ contractToDefinitionsOrDeclarations s t = t ^.. key "nodes" . values . filtered 
 
 definitionOrDeclarationToName :: AsValue s => s -> Text
 definitionOrDeclarationToName t = head $ t ^.. key "name" . _String
+
+definitionOrDeclarationToType :: AsValue s => s -> Text
+definitionOrDeclarationToType t = head $ t ^..  key "typeDescriptions" . key "typeString" . _String
 
 contractToEventDefinitions :: AsValue s => s -> [Value]
 --contractToEventDefinitions t = t ^.. key "nodes" . values . filtered (has (key "nodeType"._String.only "EventDefinition"))
@@ -124,9 +135,6 @@ contractNameAndFunctionNameToBody :: AsValue s => s -> String -> String -> [Valu
 contractNameAndFunctionNameToBody t contractName functionName =
     t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "body"
 
-functionToCFGNodes :: AsValue s => s -> [CFGNode]
---functionToCFGNodes t = statementsToCFGNodes $ functionToBodyStatements t
-functionToCFGNodes t = statementsToCFGNodes $ t ^.. key "body" . values
 
 -- body should be kept in CFG, so that the notion of scope is explicit there.
 
@@ -139,40 +147,10 @@ blockToStatements t = t ^.. key "statements" . values
 -- cFGMatricesToEntryId :: [CFGMatrix] -> Int
 -- cFGMatricesToEntryId ((_, i, _):_) = i
 
-cFGNodesToEntryNodeId :: [CFGNode] -> String
-cFGNodesToEntryNodeId ((_, nodeId, _):_) = nodeId
-
 concatCFGMatrices :: [CFGMatrix] -> [CFGMatrix] -> [CFGMatrix]
 concatCFGMatrices cfg1 cfg2 = undefined
 --- look for unfilled next id's in cfg1 and fill them by entry of cfg2
 
-statementAndNextNodeIdToCFGNodes :: Value -> Maybe String -> [CFGNode]
-statementAndNextNodeIdToCFGNodes stat mNextNodeId
-    | nodeType == "Block" = blockAndNextNodeIdToCFGNodes stat mNextNodeId
-    | nodeType == "VariableDeclarationStatement" = [(stat, id, maybeToList mNextNodeId)]
-    | nodeType == "ExpressionStatement" = [(stat, id, maybeToList mNextNodeId)]
-    | nodeType == "EmitStatement" = [(stat, id, maybeToList mNextNodeId)]
-    | nodeType == "RevertStatement" = [(stat, id, [])]
-    | nodeType == "Return" = [(stat, id, [])]
-    | nodeType == "IfStatement" = ifStatementAndNextNodeIdToCFGNodes stat mNextNodeId
-    | otherwise = [(stat, id, ["END"])]
-    where
-        nodeType = let ns = stat ^.. key "nodeType" . _String
-                    in if null ns then "" else head ns
-        id = unpack $ head $ stat ^.. key "src" . _String
-
-blockAndNextNodeIdToCFGNodes :: AsValue s => s -> Maybe String -> [CFGNode]
-blockAndNextNodeIdToCFGNodes stat mNextNodeId = undefined
-    where
-        innerStats = undefined
-
-statementsAndNextNodeIdToCFGNodes :: [Value] -> Maybe String -> [CFGNode]
-statementsAndNextNodeIdToCFGNodes [] _ = []
-statementsAndNextNodeIdToCFGNodes (stat:stats) mNextNodeId =
-    statementAndNextNodeIdToCFGNodes stat mNodeId ++ statementsAndNextNodeIdToCFGNodes stats mNextNodeId
-    where
-        mNodeId = if null stats then mNextNodeId
-                        else Just $ src $ head stats
 
 nodeType :: AsValue s => s -> String
 nodeType t = unpack $ head $ t ^.. key "nodeType" . _String
@@ -186,8 +164,6 @@ src t = unpack $ head $ t ^.. key "src" . _String
 --         entryStat = if nodeType t == "Block" then head $ blockToStatements t
 --                        else t
 
-statementsToCFGNodes :: [Value] -> [CFGNode]
-statementsToCFGNodes stats = statementsAndNextNodeIdToCFGNodes stats Nothing
 
 -- statementsToCFGEdgesList :: [Value] -> [CFGEdges]
 -- statementsToCFGEdgesList = followingNodeIdAndStatementsToCFGEdgesList Nothing
@@ -214,54 +190,10 @@ statementsToCFGNodes stats = statementsAndNextNodeIdToCFGNodes stats Nothing
 -- followingNodeIdAndStatementToCFGEdges :: Maybe String -> Value -> CFGEdges
 -- followingNodeIdAndStatementToCFGEdges mFollowingNodeId stat = undefined
 
-statementsToCFGEdgesList :: [Value] -> [CFGEdges]
-statementsToCFGEdgesList stats = followingNodeIdAndStatementsToCFGEdgesListAux Nothing stats [] []
-
-followingNodeIdAndStatementsToCFGEdgesListAux :: Maybe String -> [Value] -> CFGEdges -> [CFGEdges] -> [CFGEdges]
-followingNodeIdAndStatementsToCFGEdgesListAux _ [] es ess = es:ess
-followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId (stat:stats) es ess
-    | nt == "Block" = let es' = es ++ [(stat, id, nextNodeIdList)]
-                          innerStats = blockToStatements stat
-                          ess' = ess ++ followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId innerStats [] []
-                      in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess'
-    | nt == "VariableDeclarationStatement" = let es' = es ++ [(stat, id, nextNodeIdList)]
-                                             in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "ExpressionStatement" = let es' = es ++ [(stat, id, nextNodeIdList)]
-                                    in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "EmitStatement" = let es' = es ++ [(stat, id, nextNodeIdList)]
-                              in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "RevertStatement" = let es' = es ++ [(stat, id, [])]
-                                in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "Return" = let es' = es ++ [(stat, id, [])]
-                       in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    | nt == "IfStatement" = let trueCaseStatements = stat ^.. key "trueBody" . key "statements" . values
-                                falseCaseStatements = stat ^.. key "falseBody" . key "statements" . values
-                                trueCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId trueCaseStatements [] []
-                                falseCaseCFGEdges = followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId falseCaseStatements [] []
-                                withoutFalseBody = null $ stat ^.. filtered (has (key "falseBody"))
-                                es' = if withoutFalseBody
-                                      then es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)]
-                                      else es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])]
-                                ess' = if withoutFalseBody
-                                       then ess ++ trueCaseCFGEdges
-                                       else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
-                                -- (es', ess') = if withoutFalseBody
-                                --     then (es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)], ess ++ trueCaseCFGEdges)
-                                --     else (es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])], ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges)
-                            in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess'
-    | otherwise = let es' = es ++ [(stat, id, ["END"])]
-                  in followingNodeIdAndStatementsToCFGEdgesListAux mFollowingNodeId stats es' ess
-    where
-        nt = nodeType stat
-        id = src stat
-        nextNodeIdList = if null stats then maybeToList mFollowingNodeId else [src $ head stats]
 
 functionToStatements :: AsValue s => s -> [Value]
 functionToStatements t = t ^.. key "body" . key "statements" . values
 
-simplifyCFGEdges :: CFGEdges -> [(String, [String])]
-simplifyCFGEdges [] = []
-simplifyCFGEdges ((stat, id, ids):es) = (id, ids):simplifyCFGEdges es
 
 -- statementsToCFGNodes [] = []
 -- statementsToCFGNodes (stat:stats)
@@ -304,24 +236,27 @@ simplifyCFGEdges ((stat, id, ids):es) = (id, ids):simplifyCFGEdges es
 --         i = unpack $ head $ stat ^.. key "src" . _String
 --         js = []
 
-ifStatementAndNextNodeIdToCFGNodes :: Value -> Maybe String -> [CFGNode]
-ifStatementAndNextNodeIdToCFGNodes stat ms = undefined
+ifStatementToTrueBody :: AsValue s => s -> Value
+ifStatementToTrueBody t = head $ t ^.. key "trueBody"
+
+ifStatementToFalseBody :: AsValue s => s -> Value
+ifStatementToFalseBody t = head $ t ^.. key "falseBody"
+
+ifStatementToTrueStatements :: AsValue s => s -> [Value]
+ifStatementToTrueStatements t = trueBody ^.. key "statements" . values
     where
-        trueCaseStatements = stat ^.. key "trueBody" . key "statements"
+        trueBody = ifStatementToTrueBody t
 
-
-        falseCaseStatements = stat ^.. key "falseBody" . key "statements"
-
-ifStatementToCFGNodes t = [(trueBody, trueNodeId, [])]
+ifStatementToFalseStatements :: AsValue s => s -> [Value]
+ifStatementToFalseStatements t = falseBody ^.. key "statements" . values
     where
-        trueBody = head $ t ^.. key "trueBody"
-        trueNodeId = unpack $ head $ trueBody ^.. key "statements" . values . key "src" . _String
-        falseBody = head $ t ^.. key "falseBody"
-        falseNodeId = head $ falseBody ^.. key "src" . _String
+        falseBody = ifStatementToFalseBody t
 
-ifStatementToTrueBody t = t ^.. key "trueBody"
+isIfStatementWithoutFalseBody :: AsValue s => s -> Bool
+isIfStatementWithoutFalseBody t = null $ t ^.. filtered (has (key "falseBody"))
 
-ifStatementToTrueStatements t = t ^.. key "trueBody" . key "statements"
+blockToNodeId :: AsValue s => s -> String
+blockToNodeId t = unpack $ head $ t ^.. key "statements" . values . key "src" . _String
 
 statementsToIndexedCFGMatrices :: [Value] -> [CFGMatrix]
 statementsToIndexedCFGMatrices = indexAndStatementsToCFGMatrices 0
@@ -403,7 +338,7 @@ printContractProfile t = do putStrLn $ "Contract name: " ++ unpack cName
                             putStrLn $ "Defined error names: " ++ show errs
     where
         cName = contractToContractName t
-        vs = map variableDeclarationToName $ contractToVariableDeclarations t
+        vs = map variableDeclarationToName $ contractToStateVariableDeclarations t
         fs = map functionDefinitionToName $ contractToFunctionDefinitions t
         ss = map structDefinitionToName $ contractToStructDefinitions t
         es = map enumDefinitionToName $ contractToEnumDefinitions t
@@ -486,6 +421,12 @@ expressionInUnaryOperationFormToSubExpression stat = head $ stat ^.. key "subExp
 expressionInUnaryOperationFormToOperator :: AsValue s => s -> String
 expressionInUnaryOperationFormToOperator stat = unpack $ head $ stat ^.. key "operator" . _String
 
+functionDefinitionToBodyStatements :: AsValue s => s -> [Value]
+functionDefinitionToBodyStatements t = t ^.. key "body" . key "statements" . values
+
+functionDefinitionToBody :: AsValue s => s -> [Value]
+functionDefinitionToBody t = t ^.. key "body"
+
 functionDefinitionToParameterVariables :: AsValue s => s -> [Variable]
 functionDefinitionToParameterVariables stat = map (\v ->
     let name = unpack $ head $ v ^.. key "name" . _String
@@ -497,14 +438,24 @@ functionDefinitionToParameterVariables stat = map (\v ->
         parameters = stat ^.. key "parameters" . key "parameters" . values
 
 functionDefinitionToReturnVariables :: AsValue s => s -> [Variable]
-functionDefinitionToReturnVariables stat = map (\v ->
-    let name = unpack $ head $ v ^.. key "name" . _String
-        typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
-        src = unpack $ head $ v ^.. key "src" . _String
-     in (name, typeDescription, src))
-    parameters
+functionDefinitionToReturnVariables stat = declaredVariablesWithName
     where
         parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
+        declaredVariables = map (\v ->
+            let name = unpack $ head $ v ^.. key "name" . _String
+                typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
+                src = unpack $ head $ v ^.. key "src" . _String
+             in (name, typeDescription, src))
+            parameters
+        declaredVariablesWithName = filter (\(n, _, _) -> n /= "") declaredVariables
+
+functionDefinitionToReturnVariableTypes :: AsValue s => s -> [String]
+functionDefinitionToReturnVariableTypes stat = declaredVariables
+    where
+        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
+        declaredVariables = map (\v ->
+            unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String)
+            parameters
 
 -- NOTE: Variable declaration should be distinguished from variable use
 
