@@ -6,17 +6,21 @@ import Data.Aeson.Lens
 --import Data.ByteString ()
 import Data.Aeson.Key ( fromString )
 import Data.Text ( Text, pack, unpack )
+import Data.List
 import Data.Aeson
 import Data.Graph
 import Data.Foldable (for_)
-import Data.Maybe (maybeToList)
+import Data.Maybe (maybeToList, listToMaybe)
 --import qualified Data.ByteString as Text
 import Debug.Trace
 
 type CFGMatrix = (Value, Int, [Int])
 type VarName = String
-type Variable = (String, String, String) -- name, type, and src (pointing the declaration statement, but no nameLocation!)
-type Environment = [Variable] -- reference to available variables
+type Variable = (VarName, String, String) -- name, type, and src (pointing the declaration statement, but no nameLocation!)
+-- data Variable = VarDeclaration VarName String String | Pointer VarName 
+-- type Pointer = (VarName, Variable)
+-- data VarInfo = VarDef Int Variable | StoragePointer Variable Variable
+--type Environment = [Variable] -- reference to available variables
 
 absolutePath :: AsValue s => s -> Maybe Text
 absolutePath t = t ^? key "absolutePath" . _String
@@ -80,6 +84,14 @@ variableDeclarationToVariable v = (n, t, s)
         n = variableDeclarationToName v
         t = variableDeclarationToType v
         s = src v
+
+variableDeclarationToStorageLocation :: AsValue s => s -> String
+variableDeclarationToStorageLocation t = unpack $ head $ t ^.. key "storageLocation" . _String
+
+-- Note: declarations is an array, which is nullable according to the AST specification.
+-- Currently it assumes the array is non-empty, and counts only the first element.
+variableDeclarationStatementToVariableDeclaration :: AsValue s => s -> Value
+variableDeclarationStatementToVariableDeclaration stat = head $ stat ^.. key "declarations" . values
 
 -- struct-definition, event-definition, enum-definition, constant-variable-declaration, error-definition
 
@@ -352,10 +364,10 @@ variableDeclarationStatementToDeclaredVariable stat = (name, typeDescription, sr
         typeDescription = unpack $ head $ stat ^.. key "declarations" . values . key "typeDescriptions" . key "typeString" . _String
         src = unpack $ head $ stat ^.. key "declarations" . values . key "src" . _String
 
-variableDeclarationStatementToInitialValue :: AsValue s => s -> Value
+variableDeclarationStatementToInitialValue :: AsValue s => s -> Maybe Value
 variableDeclarationStatementToInitialValue stat = v
     where
-        v = head $ stat ^.. key "initialValue"
+        v = listToMaybe $ stat ^.. key "initialValue"
 
 -- identifierExpressionToVariable :: AsValue s => s -> Variable
 -- identifierExpressionToVariable stat = (name, typeDescription, src)
@@ -385,6 +397,35 @@ expressionToFreeVariables stat
     where
         nt = nodeType stat
 
+expressionToFreeVariableNames :: AsValue s => s -> [VarName]
+expressionToFreeVariableNames t = nub $ expressionToFreeVariableNamesAux t
+
+expressionToFreeVariableNamesAux :: AsValue s => s -> [VarName]
+expressionToFreeVariableNamesAux stat
+ | nt == "Identifier" = [expressionInIdentifierFormToVariableName stat]
+ | nt == "UnaryOperation" = expressionToFreeVariableNamesAux (expressionInUnaryOperationFormToSubExpression stat)
+ | nt == "BinaryOperation" = concatMap expressionToFreeVariableNamesAux (expressionInBinaryOperationFormToExpressions stat)
+ | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
+                             ie = expressionInIndexAccessFormToIndexExpression stat
+                            in expressionToFreeVariableNamesAux be ++ expressionToFreeVariableNamesAux ie
+ | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName stat]
+ | nt == "Literal" = []
+ | nt == "FunctionCall" = concatMap expressionToFreeVariableNamesAux $ expressionInFunctionCallFormToArguments stat
+    where
+        nt = nodeType stat
+
+expressionToPointableObjectName :: AsValue s => s -> Maybe String
+expressionToPointableObjectName t
+ | nt == "Identifier" = Just $ expressionInIdentifierFormToVariableName t
+ | nt == "UnaryOperation" = Nothing
+ | nt == "BinaryOperation" = Nothing
+ | nt == "IndexAccess" = expressionToPointableObjectName $ expressionInIndexAccessFormToBaseExpression t
+ | nt == "MemberAccess" = expressionToPointableObjectName $ expressionInMemberAccessFormToObjectName t
+ | nt == "Literal" = Nothing
+    where
+        nt = nodeType t
+
+
 expressionInMemberAccessFormToMemberName :: AsValue s => s -> String
 expressionInMemberAccessFormToMemberName stat = unpack $ head $ stat ^.. key "memberName" . _String
 
@@ -395,6 +436,9 @@ expressionInMemberAccessFormToVariable stat = if isEnum then Nothing else Just (
         name = unpack $ head $ stat ^.. key "expression" . key "name" . _String
         typeDescription = unpack $ head $ stat ^.. key "expression" . key "typeDescriptions" . key "typeString" . _String
         src = unpack $ head $ stat ^.. key "expression" . key "src" . _String
+
+expressionInMemberAccessFormToObjectName :: AsValue p => p -> String
+expressionInMemberAccessFormToObjectName stat = unpack $ head $ stat ^.. key "expression" . key "name" . _String
 
 expressionInIndexAccessFormToBaseExpression :: AsValue s => s -> Value
 expressionInIndexAccessFormToBaseExpression stat = head $ stat ^.. key "baseExpression"
@@ -408,6 +452,9 @@ expressionInIdentifierFormToVariable stat =
         typeDescription = unpack $ head $ stat ^.. key "typeDescriptions" . key "typeString" . _String
         src = unpack $ head $ stat ^.. key "src" . _String
      in (name, typeDescription, src)
+
+expressionInIdentifierFormToVariableName :: AsValue s => s -> VarName
+expressionInIdentifierFormToVariableName stat = unpack $ head $ stat ^.. key "name" . _String
 
 expressionInBinaryOperationFormToExpressions :: AsValue s => s -> [Value]
 expressionInBinaryOperationFormToExpressions stat = lhs ++ rhs
@@ -465,6 +512,9 @@ expressionStatementToExpression stat = head $ stat ^.. key "expression"
 statementInWhileFormToConditionalExpression :: AsValue s => s -> Value
 statementInWhileFormToConditionalExpression stat = head $ stat ^.. key "condition"
 
+statementInReturnFormToReturnExpression :: AsValue s => s -> Maybe Value
+statementInReturnFormToReturnExpression stat = stat ^? key "expression"
+
 expressionInAssignmentFormToOperator :: AsValue s => s -> String
 expressionInAssignmentFormToOperator stat =unpack $ head $ stat ^.. key "operator" . _String
 
@@ -480,3 +530,10 @@ isIncrementOrDecrementOperator op = (op == "++") || (op == "--")
 
 expressionInFunctionCallFormToArguments :: AsValue s => s -> [Value]
 expressionInFunctionCallFormToArguments stat = stat ^.. key "arguments" . values
+
+variableToVarName :: Variable -> VarName
+variableToVarName (n, t, s) = n
+
+isPointerTypeString :: String -> Bool
+isPointerTypeString s = last (words s) == "pointer"
+-- eg. ("typeString",String "struct Example.Order storage pointer")
