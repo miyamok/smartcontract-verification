@@ -515,6 +515,9 @@ statementInWhileFormToConditionalExpression stat = head $ stat ^.. key "conditio
 statementInReturnFormToReturnExpression :: AsValue s => s -> Maybe Value
 statementInReturnFormToReturnExpression stat = stat ^? key "expression"
 
+statementInEmitFormToEventCall :: AsValue s => s -> Value
+statementInEmitFormToEventCall stat = head $ stat ^.. key "eventCall"
+
 expressionInAssignmentFormToOperator :: AsValue s => s -> String
 expressionInAssignmentFormToOperator stat =unpack $ head $ stat ^.. key "operator" . _String
 

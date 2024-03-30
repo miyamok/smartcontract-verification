@@ -10,6 +10,7 @@ import Debug.Trace
 
 
 type LVTable = [(String, [Variable], [Variable])] -- A row consists of the src location, LVentry, and LVexit.
+type DUTable = [(String, [String], [Variable], [Variable])]
 
 --------------------------------------------
 ----  Read Variables (gen)
@@ -35,6 +36,7 @@ statementAndEnvironmentToReadVariables stat env
  | nt == "Return" = let varNames = concatMap expressionToFreeVariableNames $ maybeToList $ statementInReturnFormToReturnExpression stat
                         vars = catMaybes $ map (\vn -> varNameAndEnvironmentToVariable vn env) varNames
                      in vars
+ | nt == "EmitStatement" = emitStatementAndEnvironmentToReadVariables stat env
     where
         nt = nodeType stat
 
@@ -51,6 +53,9 @@ variableDeclarationStatementAndEnvironmentToReadVariables stat env = vars
         varNames = maybe [] expressionToFreeVariableNames mInitValue
         vars = catMaybes $ map (\vn -> varNameAndEnvironmentToVariable vn env) varNames
 
+emitStatementAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
+emitStatementAndEnvironmentToReadVariables stat =
+    expressionInFunctionCallFormAndEnvironmentToReadVariables (statementInEmitFormToEventCall stat)
 
 ----- for expression
 
@@ -188,9 +193,15 @@ statementAndEnvironmentToUpdatedVariables stat env
  | nt == "VariableDeclarationStatement" = variableDeclarationStatementAndEnvironmentToUpdatedVariables stat env
  | nt == "ExpressionStatement" = expressionAndEnvironmentToUpdatedVariables (expressionStatementToExpression stat) env
  | nt == "WhileStatement" = expressionAndEnvironmentToUpdatedVariables (statementInWhileFormToConditionalExpression stat) env
- | nt == "Return" = undefined
+ | nt == "Return" = case statementInReturnFormToReturnExpression stat of Nothing -> []
+                                                                         Just expr -> expressionAndEnvironmentToUpdatedVariables expr env
+ | nt == "EmitStatement" = emitStatementAndEnvironmentToUpdatedVariables stat env
     where
         nt = nodeType stat
+
+emitStatementAndEnvironmentToUpdatedVariables :: AsValue s => s -> Environment -> [Variable]
+emitStatementAndEnvironmentToUpdatedVariables stat =
+    expressionInFunctionCallFormAndEnvironmentToUpdatedVariables (statementInEmitFormToEventCall stat)
 
 
 -- variableDeclarationStatementToUpdatedVariableNames :: AsValue s => s -> [VarName]
@@ -327,6 +338,49 @@ expressionInAssignmentFormAndEnvironmentToUpdatedVariables stat env
     where
         leftExpr = expressionInAssignmentFormToLeftExpression stat
         nt = nodeType leftExpr
+
+--------------------------------------------------
+---- definition-use analysis
+
+cFGEdgesToDefinitionUseTable :: CFGEdges -> DUTable
+cFGEdgesToDefinitionUseTable [] = []
+cFGEdgesToDefinitionUseTable (((stat, env), nodeId, nextNodeIds):cFGEdges)
+ | length nextNodeIds > 1 = undefined -- no branching supported yet
+ | otherwise = (nodeId, nextNodeIds, updatedVariables, readVariables):restTable
+    where
+        updatedVariables = statementAndEnvironmentToUpdatedVariables stat env
+        readVariables = statementAndEnvironmentToReadVariables stat env
+        restTable = cFGEdgesToDefinitionUseTable cFGEdges
+
+cFGEdgesToUnreadVariables :: CFGEdges -> [Variable]
+cFGEdgesToUnreadVariables [] = []
+cFGEdgesToUnreadVariables cFGEdges = localUnreadVars
+    where
+        definitionUseTable = cFGEdgesToDefinitionUseTable cFGEdges
+        ((stat, env), nodeId, nextNodeIds) = head cFGEdges
+        parameterVars = [ v | VarDef 0 v <- env]
+        initialTable = ("", [nodeId], parameterVars, []):definitionUseTable
+        unreadVars = definitionUseTableToUnreadVariables initialTable
+        nonLocalVars = [ v | VarDef i v <- env, i > 0 ]
+        localUnreadVars = [ var | var <- unreadVars, var `notElem` nonLocalVars]
+
+definitionUseTableToUnreadVariables :: DUTable -> [Variable]
+definitionUseTableToUnreadVariables [] = []
+definitionUseTableToUnreadVariables ((nodeId, nextNodeIds, updatedVars, readVars):definitionUseTable) =
+    unreadVars ++ definitionUseTableToUnreadVariables definitionUseTable
+    where
+        readVars = concatMap (definitionUseTableAndNodeIdToReadVariables definitionUseTable) nextNodeIds
+        unreadVars = [ var | var <- updatedVars, var `notElem` readVars ]
+
+definitionUseTableAndNodeIdToReadVariables :: DUTable -> String -> [Variable]
+definitionUseTableAndNodeIdToReadVariables definitionUseTable nodeId =
+    case info of [] -> []
+                 ((rvs, nextNodeIds):_) ->
+                    rvs ++ concatMap (definitionUseTableAndNodeIdToReadVariables definitionUseTable) nextNodeIds
+    where
+        info = [ (rvs, nextNodeIds) | (nid, nextNodeIds, _, rvs) <- definitionUseTable, nid == nodeId ]
+
+
 
 --------------------------------------------------
 ----  Live variables analysis table
