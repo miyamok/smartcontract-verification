@@ -60,7 +60,7 @@ main = do args <- getArgs
                     let cs = contracts t
                     let c = head cs
                     let vdecs = contractToStateVariableDeclarations c
-                    print vdecs
+                    --print vdecs
                     -- print $ length vdecs
                     -- --let fdefs = contractToFunctionDefinitions c
                     -- let env = map variableDeclarationToVariable vdecs
@@ -68,13 +68,47 @@ main = do args <- getArgs
                     let fs = contractToFunctionDefinitions c
                     let f = head fs
                     let fn = functionDefinitionToName f
-                    print fn
+                    --print fn
                     --print f
                     let fstats = functionDefinitionToBodyStatements f
-                    print $ functionDefinitionToParameterVariables f
+                    let stat = head fstats
+                    --print stat2
+                    -- print $ statementToReadVariableNames stat2
+                    let x = variableDeclarationStatementToVariableDeclaration stat
+                    -- print x
+                    -- print $ variableDeclarationToStorageLocation x
+                    -- print $ variableDeclarationStatementToInitialValue stat
+                    -- print $ functionDefinitionToParameterVariables f
+
+
                     let cfgs = contractToCFGEdgesList c
-                    print $ map simplifyCFGEdges cfgs
-                    --print cfgs
+                    --print $ map simplifyCFGEdges cfgs
+                    -- print cfgs
+
+                    let unreads = map cFGEdgesToUnreadVariables cfgs
+                    print unreads
+
+                    -- let unread = cFGEdgesToUnreadVariables $ last cfgs
+                    -- print unread
+
+
+                    -- let lVTables = map cFGEdgesToLiveVariablesAnalysisTable cfgs
+                    -- print lVTables
+                    --let lVTables1 = map cFGEdgesToOneStepLiveVariablesAnalysisTable $ [head cfgs]
+                    --print lVTables1
+                    -- let fcfg = head cfgs
+                    -- let ((stat1, env1), nodeId1, nextNodeIds1) = head fcfg
+                    -- let ((stat2, env2), nodeId2, nextNodeIds2) = last fcfg
+                    -- --print $ statementAndEnvironmentToReadVariableNames stat1 env1
+                    -- print $ statementAndEnvironmentToUpdatedVariables stat1 env1
+                    -- --print $ statementToReadVariableNames stat1
+                    -- print $ statementAndEnvironmentToReadVariables stat1 env1
+                    -- print $ statementAndEnvironmentToUpdatedVariables stat2 env2
+                    -- --print $ statementToReadVariableNames stat2
+                    -- print $ statementAndEnvironmentToReadVariables stat2 env2
+
+
+
 
 --                     let cNames = map contractToContractName cs
 --                     --print $ head cs

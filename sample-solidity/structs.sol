@@ -19,7 +19,7 @@ contract Example {
     Order[] public orders;
 
     function f(uint256 key) external payable {
-        Order storage order = orders[key];
+        Order memory order = orders[key];
         require(order.buyer == msg.sender);
         require(order.amount == msg.value);
         // created -> paid -> ?
