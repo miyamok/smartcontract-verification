@@ -40,7 +40,7 @@ The first line is a definition of <code>greeting</code> and its use is found in 
 In case of Solidity, this analysis is useful to find a particular type of bug due to the memory/storage distinction.
 
 ### Example
-Here we discuss an example solidity program [a relative link](sample-solidity/structs.sol).
+Here we discuss an example solidity program [structs.sol](sample-solidity/structs.sol).
 It is a smart contract for an online shop where the functionalities dealing with orders and payments are implemented.
 
 The state variable <code>orders</code> is array of <code>Order</code>.  It is a parsistent data and meant to record orders.
