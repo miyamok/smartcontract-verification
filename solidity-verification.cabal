@@ -31,8 +31,8 @@ executable solidity-verification
         Reader,
         Parser,
         Conditional,
-        Profile,
-        LiveVariables,
+        SolidityFeature,
+        DefinitionUseAnalysis,
         CFG
 
     -- LANGUAGE extensions used by modules in this package.

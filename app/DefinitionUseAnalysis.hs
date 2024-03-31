@@ -1,8 +1,8 @@
-module LiveVariables where
+module DefinitionUseAnalysis where
 
 import Data.Aeson
 import Data.Aeson.Lens
-import Profile
+import SolidityFeature
 import CFG
 import Data.Maybe
 import Data.List
@@ -16,15 +16,6 @@ type DUTable = [(String, [String], [Variable], [Variable])]
 ----  Read Variables (gen)
 
 ----- for statement
-
--- statementToReadVariableNames :: AsValue s => s -> [VarName]
--- statementToReadVariableNames stat
---  | nt == "VariableDeclarationStatement" = variableDeclarationStatementToReadVariableNames stat
---  | nt == "ExpressionStatement" = expressionToReadVariableNames $ expressionStatementToExpression stat
---  | nt == "WhileStatement" = expressionToFreeVariableNames $ statementInWhileFormToConditionalExpression stat
---  | nt == "Return" = concatMap expressionToFreeVariableNames $ maybeToList $ statementInReturnFormToReturnExpression stat
---     where
---         nt = nodeType stat
 
 statementAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 statementAndEnvironmentToReadVariables stat env
@@ -40,12 +31,6 @@ statementAndEnvironmentToReadVariables stat env
     where
         nt = nodeType stat
 
--- variableDeclarationStatementToReadVariableNames :: AsValue s => s -> [VarName]
--- variableDeclarationStatementToReadVariableNames stat =
---     maybe [] expressionToFreeVariableNames mInitValue
---     where
---         mInitValue = variableDeclarationStatementToInitialValue stat
-
 variableDeclarationStatementAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 variableDeclarationStatementAndEnvironmentToReadVariables stat env = vars
     where
@@ -58,21 +43,6 @@ emitStatementAndEnvironmentToReadVariables stat =
     expressionInFunctionCallFormAndEnvironmentToReadVariables (statementInEmitFormToEventCall stat)
 
 ----- for expression
-
--- expressionToReadVariableNames :: AsValue s => s -> [VarName]
--- expressionToReadVariableNames stat
---  | nt == "Identifier" = [expressionInIdentifierFormToVariableName stat]
---  | nt == "UnaryOperation" = expressionToFreeVariableNames $ expressionInUnaryOperationFormToSubExpression stat
---  | nt == "BinaryOperation" = concatMap expressionToFreeVariableNames (expressionInBinaryOperationFormToExpressions stat)
---  | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
---                              ie = expressionInIndexAccessFormToIndexExpression stat
---                             in expressionToFreeVariableNames be ++ expressionToFreeVariableNames ie
---  | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName stat]
---  | nt == "Literal" = []
---  | nt == "Assignment" = expressionInAssignmentFormToReadVariableNames stat
---  | nt == "FunctionCall" = expressionInFunctionCallFormToReadVariableNames stat
---     where
---         nt = nodeType stat
 
 expressionAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 expressionAndEnvironmentToReadVariables stat env
@@ -92,26 +62,6 @@ expressionAndEnvironmentToReadVariables stat env
  | nt == "FunctionCall" = expressionInFunctionCallFormAndEnvironmentToReadVariables stat env
     where
         nt = nodeType stat
-
--- expressionInAssignmentFormToReadVariableNames :: AsValue s => s -> [VarName]
--- expressionInAssignmentFormToReadVariableNames stat
---  | lftNodeType == "Identifier" = rhtFvars ++ lftReadVars
---  | lftNodeType == "MemberAccess" =
---     let var = expressionInMemberAccessFormToVariable lftExpr
---         -- should exactly count parameters occurring in the left expression!
---         -- should not contain non-variables! (currently, enum objects are included)
---      in lftFvars ++ rhtFvars ++ lftReadVars
---  | lftNodeType == "IndexAccess" =
---     let idxExpr = expressionInIndexAccessFormToIndexExpression lftExpr
---      in expressionToFreeVariableNames idxExpr ++ rhtFvars ++ lftReadVars
---     where
---         lftExpr = expressionInAssignmentFormToLeftExpression stat
---         rhtExpr = expressionInAssignmentFormToRightExpression stat
---         lftFvars = expressionToFreeVariableNames lftExpr
---         rhtFvars = expressionToFreeVariableNames rhtExpr
---         lftNodeType = nodeType lftExpr
---         operator = expressionInAssignmentFormToOperator stat
---         lftReadVars = if isArithmeticAssignmentOperator operator then lftFvars else []
 
 expressionInAssignmentFormAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 expressionInAssignmentFormAndEnvironmentToReadVariables stat env
@@ -152,11 +102,6 @@ expressionInAssignmentFormAndEnvironmentToReadVariables stat env
 -- tuple
 -- (bool s, ) = a.call{ value: 0.01 ether }("");
 
--- expressionInFunctionCallFormToReadVariableNames :: AsValue s => s -> [VarName]
--- expressionInFunctionCallFormToReadVariableNames stat = concatMap expressionToFreeVariableNames argExprs
---     where
---         argExprs = expressionInFunctionCallFormToArguments stat
-
 expressionInFunctionCallFormAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 expressionInFunctionCallFormAndEnvironmentToReadVariables stat env = vars
     where
@@ -169,15 +114,6 @@ expressionInFunctionCallFormAndEnvironmentToReadVariables stat env = vars
 ----  Updated Variables (kill)
 
 ----- for statement
-
--- statementToUpdatedVariableNames :: AsValue s => s -> [VarName]
--- statementToUpdatedVariableNames stat
---  | nt == "VariableDeclarationStatement" = variableDeclarationStatementToUpdatedVariableNames stat
---  | nt == "ExpressionStatement" = expressionToUpdatedVariableNames $ expressionStatementToExpression stat
---  | nt == "WhileStatement" = expressionToUpdatedVariableNames $ statementInWhileFormToConditionalExpression stat
---  | nt == "Return" = undefined
---     where
---         nt = nodeType stat
 
 statementAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 statementAndEnvironmentToUpdatedVariableNames stat env
@@ -203,15 +139,6 @@ emitStatementAndEnvironmentToUpdatedVariables :: AsValue s => s -> Environment -
 emitStatementAndEnvironmentToUpdatedVariables stat =
     expressionInFunctionCallFormAndEnvironmentToUpdatedVariables (statementInEmitFormToEventCall stat)
 
-
--- variableDeclarationStatementToUpdatedVariableNames :: AsValue s => s -> [VarName]
--- variableDeclarationStatementToUpdatedVariableNames stat =
---     varName:varNames
---     where
---         expr = maybeToList $ variableDeclarationStatementToInitialValue stat
---         (varName, _, _) = variableDeclarationStatementToDeclaredVariable stat
---         varNames = concatMap expressionToUpdatedVariableNames expr
-
 variableDeclarationStatementAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 variableDeclarationStatementAndEnvironmentToUpdatedVariableNames stat env =
     varName:varNames
@@ -229,23 +156,6 @@ variableDeclarationStatementAndEnvironmentToUpdatedVariables stat env =
         vars = concatMap (\e -> expressionAndEnvironmentToUpdatedVariables e env) expr
 
 ----- for expression
-
--- expressionToUpdatedVariableNames :: AsValue s => s -> [VarName]
--- expressionToUpdatedVariableNames stat
---  | nt == "Identifier" = []
---  | nt == "UnaryOperation" = let subExpr = expressionInUnaryOperationFormToSubExpression stat
---                                 op = expressionInUnaryOperationFormToOperator stat
---                               in [expressionInIdentifierFormToVariableName subExpr | isIncrementOrDecrementOperator op]
---  | nt == "BinaryOperation" = concatMap expressionToUpdatedVariableNames (expressionInBinaryOperationFormToExpressions stat)
---  | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
---                              ie = expressionInIndexAccessFormToIndexExpression stat
---                             in expressionToUpdatedVariableNames be ++ expressionToUpdatedVariableNames ie
---  | nt == "MemberAccess" = [] --maybeToList $ expressionInMemberAccessFormToVariable stat
---  | nt == "Literal" = []
---  | nt == "Assignment" = expressionInAssignmentFormToUpdatedVariableNames stat
---  | nt == "FunctionCall" = expressionInFunctionCallFormToUpdatedVariableNames stat
---     where
---         nt = nodeType stat
 
 expressionAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 expressionAndEnvironmentToUpdatedVariableNames stat env
@@ -281,11 +191,6 @@ expressionAndEnvironmentToUpdatedVariables stat env
     where
         nt = nodeType stat
 
--- expressionInFunctionCallFormToUpdatedVariableNames :: AsValue s => s -> [VarName]
--- expressionInFunctionCallFormToUpdatedVariableNames stat = concatMap expressionToUpdatedVariableNames argExprs
---     where
---         argExprs = expressionInFunctionCallFormToArguments stat
-
 expressionInFunctionCallFormAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 expressionInFunctionCallFormAndEnvironmentToUpdatedVariableNames stat env =
     concatMap (\e -> expressionAndEnvironmentToUpdatedVariableNames e env) argExprs
@@ -297,18 +202,6 @@ expressionInFunctionCallFormAndEnvironmentToUpdatedVariables stat env =
     concatMap (\e -> expressionAndEnvironmentToUpdatedVariables e env) argExprs
     where
         argExprs = expressionInFunctionCallFormToArguments stat
-
--- -- generally several variables (eg. tuple unpacking)
--- expressionInAssignmentFormToUpdatedVariableNames :: AsValue s => s -> [VarName]
--- expressionInAssignmentFormToUpdatedVariableNames stat
---  | nt == "Identifier" = [expressionInIdentifierFormToVariableName leftExpr]
---  | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName leftExpr]
---  | nt == "IndexAccess" =
---     let baseExpr = expressionInIndexAccessFormToBaseExpression leftExpr
---       in expressionToFreeVariableNames baseExpr
---     where
---         leftExpr = expressionInAssignmentFormToLeftExpression stat
---         nt = nodeType leftExpr
 
 -- generally several variables (eg. tuple unpacking)
 expressionInAssignmentFormAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
@@ -382,53 +275,53 @@ definitionUseTableAndNodeIdToReadVariables definitionUseTable nodeId =
 
 
 
---------------------------------------------------
-----  Live variables analysis table
+-- --------------------------------------------------
+-- ----  Live variables analysis table
 
-cFGEdgesToLiveVariablesAnalysisTable :: CFGEdges -> LVTable
-cFGEdgesToLiveVariablesAnalysisTable cFGEdges = cFGEdgesToLiveVariablesAnalysisTableAux initTable cFGEdges
-    where
-        initTable = [ (nodeId, [], []) | (_, nodeId, _) <- cFGEdges ]
+-- cFGEdgesToLiveVariablesAnalysisTable :: CFGEdges -> LVTable
+-- cFGEdgesToLiveVariablesAnalysisTable cFGEdges = cFGEdgesToLiveVariablesAnalysisTableAux initTable cFGEdges
+--     where
+--         initTable = [ (nodeId, [], []) | (_, nodeId, _) <- cFGEdges ]
 
-cFGEdgesToLiveVariablesAnalysisTableAux :: LVTable -> CFGEdges -> LVTable
-cFGEdgesToLiveVariablesAnalysisTableAux oldTable cFGEdges =
-    if newTable == oldTable then newTable else cFGEdgesToLiveVariablesAnalysisTableAux newTable cFGEdges
-    where
-        newTable = [ (nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | (_, nodeId, _) <- cFGEdges ]
+-- cFGEdgesToLiveVariablesAnalysisTableAux :: LVTable -> CFGEdges -> LVTable
+-- cFGEdgesToLiveVariablesAnalysisTableAux oldTable cFGEdges =
+--     if newTable == oldTable then newTable else cFGEdgesToLiveVariablesAnalysisTableAux newTable cFGEdges
+--     where
+--         newTable = [ (nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | (_, nodeId, _) <- cFGEdges ]
 
-cFGEdgesToOneStepLiveVariablesAnalysisTable :: CFGEdges -> LVTable
-cFGEdgesToOneStepLiveVariablesAnalysisTable cFGEdges =
-    [(nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | nodeId <- nodeIds]
-    -- [(nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | nodeId <- nodeIds]
-    where
-        nodeIds = cFGEdgesToNodeIds cFGEdges
+-- cFGEdgesToOneStepLiveVariablesAnalysisTable :: CFGEdges -> LVTable
+-- cFGEdgesToOneStepLiveVariablesAnalysisTable cFGEdges =
+--     [(nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | nodeId <- nodeIds]
+--     -- [(nodeId, cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId, cFGEdgesAndNodeIdToLVExit cFGEdges nodeId) | nodeId <- nodeIds]
+--     where
+--         nodeIds = cFGEdgesToNodeIds cFGEdges
 
-cFGEdgesAndNodeIdToLVEntry :: CFGEdges -> String -> [Variable]
-cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId = nub $ [ v | v <- lVexit, v `notElem` updatedVariables] ++ readVariables
-    where
-        infos = [ (stat, env) | ((stat, env), nodeId', nextNodeIds) <- cFGEdges, nodeId == nodeId' ]
-        (stat, env) = head infos
-        updatedVariableNames = statementAndEnvironmentToUpdatedVariableNames stat env
-        updatedVariables = catMaybes $ map (\n -> varNameAndEnvironmentToVariable n env) updatedVariableNames
-        readVariables = statementAndEnvironmentToReadVariables stat env
-        -- readVariables = catMaybes $ map (\n -> varNameAndEnvironmentToVariable n env) readVariableNames
-        lVexit = cFGEdgesAndNodeIdToLVExit cFGEdges nodeId
-        -- node = head $ [ ((stat, env), nodeId, nextNodes) | ((stat, env), nodeId, nextNodes) <- cFGEdges]
-        isEntryNode =  [ nodeId' | (_, nodeId', _) <- cFGEdgesToEntryNodes cFGEdges, nodeId == nodeId']
-        -- parameterVariables = [ v | VarDef 0 v <- env ]
-        -- lVEntry = [ v | v <- lVexit, v `notElem` updatedVariables] ++ readVariables ++ if isEntryNode then
+-- cFGEdgesAndNodeIdToLVEntry :: CFGEdges -> String -> [Variable]
+-- cFGEdgesAndNodeIdToLVEntry cFGEdges nodeId = nub $ [ v | v <- lVexit, v `notElem` updatedVariables] ++ readVariables
+--     where
+--         infos = [ (stat, env) | ((stat, env), nodeId', nextNodeIds) <- cFGEdges, nodeId == nodeId' ]
+--         (stat, env) = head infos
+--         updatedVariableNames = statementAndEnvironmentToUpdatedVariableNames stat env
+--         updatedVariables = catMaybes $ map (\n -> varNameAndEnvironmentToVariable n env) updatedVariableNames
+--         readVariables = statementAndEnvironmentToReadVariables stat env
+--         -- readVariables = catMaybes $ map (\n -> varNameAndEnvironmentToVariable n env) readVariableNames
+--         lVexit = cFGEdgesAndNodeIdToLVExit cFGEdges nodeId
+--         -- node = head $ [ ((stat, env), nodeId, nextNodes) | ((stat, env), nodeId, nextNodes) <- cFGEdges]
+--         isEntryNode =  [ nodeId' | (_, nodeId', _) <- cFGEdgesToEntryNodes cFGEdges, nodeId == nodeId']
+--         -- parameterVariables = [ v | VarDef 0 v <- env ]
+--         -- lVEntry = [ v | v <- lVexit, v `notElem` updatedVariables] ++ readVariables ++ if isEntryNode then
 
-cFGEdgesAndNodeIdToLVExit :: CFGEdges -> String -> [Variable]
-cFGEdgesAndNodeIdToLVExit cFGEdges nodeId
- | isFinalNode = []
---  | isFinalNode = nub $ concatMap (cFGEdgesAndNodeIdToLVEntry cFGEdges) prevNodeIds
- | otherwise = nub $ concatMap (cFGEdgesAndNodeIdToLVEntry cFGEdges) nextNodeIds
---  | otherwise = let ((v, env), nodeId, _) = head finNodes
---                    env' = removeLocalVariablesInEnvironment env
---                 in [ v' | VarDef i v' <- env']
-    where
-        -- finNodes = traceShowId $ cFGEdgesToFinalNodes cFGEdges
-        isFinalNode = not $ null [ nodeId' | (info, nodeId', nextNodeIds) <- cFGEdgesToFinalNodes cFGEdges, nodeId' == nodeId]
-        prevNodeIds = [ nodeId' | ( _, nodeId', nextNodes) <- cFGEdges, nodeId `elem` nextNodes ]
-        nextNodeIds = head [ nextNodeIds | ( _, nodeId', nextNodeIds) <- cFGEdges, nodeId == nodeId' ]
+-- cFGEdgesAndNodeIdToLVExit :: CFGEdges -> String -> [Variable]
+-- cFGEdgesAndNodeIdToLVExit cFGEdges nodeId
+--  | isFinalNode = []
+-- --  | isFinalNode = nub $ concatMap (cFGEdgesAndNodeIdToLVEntry cFGEdges) prevNodeIds
+--  | otherwise = nub $ concatMap (cFGEdgesAndNodeIdToLVEntry cFGEdges) nextNodeIds
+-- --  | otherwise = let ((v, env), nodeId, _) = head finNodes
+-- --                    env' = removeLocalVariablesInEnvironment env
+-- --                 in [ v' | VarDef i v' <- env']
+--     where
+--         -- finNodes = traceShowId $ cFGEdgesToFinalNodes cFGEdges
+--         isFinalNode = not $ null [ nodeId' | (info, nodeId', nextNodeIds) <- cFGEdgesToFinalNodes cFGEdges, nodeId' == nodeId]
+--         prevNodeIds = [ nodeId' | ( _, nodeId', nextNodes) <- cFGEdges, nodeId `elem` nextNodes ]
+--         nextNodeIds = head [ nextNodeIds | ( _, nodeId', nextNodeIds) <- cFGEdges, nodeId == nodeId' ]
 
