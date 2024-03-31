@@ -30,7 +30,28 @@ $ cabal run solidity-verification PATH/TO/YOUR/SOLIDITYPROGRAM.sol
 ## Definition-Use analysis
 
 ### Example
+Here we discuss an example solidity program [a relative link](sample-solidity/structs.sol).
+It is a smart contract for an online shop where the functionalities dealing with orders and payments are implemented.
 
+The state variable <code>orders</code> is array of <code>Order</code>.  It is a parsistent data and meant to record orders.
+
+The function <code>payment</code> has a local variable <code>order</code> of struct type <code>Order</code>.
+As this is a <code>storage</coode> variable, the initial assignment makes <code>order</code> point to <code>orders[key]</code>, and future modification to <code>order</code> actually modified the state variable <code>orders</code>.
+The following lines check that
++ the caller of this function is indeed the buyer,
++ the caller of this function pays exactly the price of the order, and
++ the status of the order indicates that the payment is still awaited.
+The last step of the function is the assignment.
+As described above, the local variable <code>order</code> is pointing <code>orders[key]</code>, and <code>orders[key].status</code> gets the new value <code>OrderStatus.Paid</code>.
+This change is persistent, and in the future one can see that the payment has been completed.
+
+Another function <code>paymentForgetful</code> has a problem, although it looks similar as <code>payment</code>.
+The difference is that the local variable <code>order</code> is declared as a <code>memory</code> variable, that means its initial value <code>orders[key]</code> is copied and future change via this local variable <code>order</code> affects this copy.  At the end of this function, the assignment changes this copy, which is obviously diverged from the state variable, and this change is lost when the transaction is over.  In the future, the order status still indicates unpaid even though the buyer has already paid!
+
+Our tool gives a warning message concerning the local memory variable <code>order</code> in as follows.
+```
+aaa
+```
 
 # To do
 - Explaining basic logic and the satisfiability problem
