@@ -62,12 +62,11 @@ main = do args <- getArgs
                     t <- reader filename
                     putStrLn $ "File to analyze: " ++ unpack (fromJust $ absolutePath t) ++ "\n"
                     let cs = contracts t
-                    let c = head cs
                     let functionsList = map contractToFunctionDefinitions cs
                     let functionNamesList = map (map functionDefinitionToName) functionsList
                     let cfgsList = map contractToCFGEdgesList cs
                     let unreadsList = map (map cFGEdgesToUnreadVariables) cfgsList
-                    let fnUnreads = filter (\(fn, unreads) -> length unreads /= 0) $ (zip (head functionNamesList) (head unreadsList))
+                    let fnUnreads = map (filter (\(fn, unreads) -> length unreads /= 0)) $ zipWith zip functionNamesList unreadsList
                     text <- readFile $ unpack filename
-                    let output = map (uncurry (showFunctionNameAndUnreadVariables text)) fnUnreads
+                    let output = concatMap (map (uncurry (showFunctionNameAndUnreadVariables text))) fnUnreads
                     putStrLn $ Data.List.intercalate "\n\n" output
