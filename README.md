@@ -27,7 +27,17 @@ $ cabal run solidity-verification PATH/TO/YOUR/SOLIDITYPROGRAM.sol
 
 # Implemented features
 
-## Definition-Use analysis
+## Definition-use analysis
+Definition-use analysis is to find from a definition its use.
+Here a definition means a value assignment to a variable, and a use means any operation referring to the assigned value.
+For example, in the following pseudo-code,
+```
+String greeting = "Hello, world"
+print greeting
+```
+The first line is a definition of <code>greeting</code> and its use is found in the following line.
+
+In case of Solidity, this analysis is useful to find a particular type of bug due to the memory/storage distinction.
 
 ### Example
 Here we discuss an example solidity program [a relative link](sample-solidity/structs.sol).
@@ -36,11 +46,12 @@ It is a smart contract for an online shop where the functionalities dealing with
 The state variable <code>orders</code> is array of <code>Order</code>.  It is a parsistent data and meant to record orders.
 
 The function <code>payment</code> has a local variable <code>order</code> of struct type <code>Order</code>.
-As this is a <code>storage</coode> variable, the initial assignment makes <code>order</code> point to <code>orders[key]</code>, and future modification to <code>order</code> actually modified the state variable <code>orders</code>.
+As this is a <code>storage</code> variable, the initial assignment makes <code>order</code> point to <code>orders[key]</code>, and future modification to <code>order</code> actually modified the state variable <code>orders</code>.
 The following lines check that
 + the caller of this function is indeed the buyer,
 + the caller of this function pays exactly the price of the order, and
 + the status of the order indicates that the payment is still awaited.
+
 The last step of the function is the assignment.
 As described above, the local variable <code>order</code> is pointing <code>orders[key]</code>, and <code>orders[key].status</code> gets the new value <code>OrderStatus.Paid</code>.
 This change is persistent, and in the future one can see that the payment has been completed.
