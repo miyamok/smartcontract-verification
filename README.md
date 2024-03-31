@@ -62,7 +62,7 @@ The difference is that the local variable <code>order</code> is declared as a <c
 Our tool gives a warning message concerning the local memory variable <code>order</code> in as follows.
 ```
 $ cabal run solidity-verification sample-solidity/structs.sol
-In function f the following variables are not read after an assignment
+In function paymentForgetful the following variables are not read after an assignment
 "order" declared at line 44
 ```
 This suggests that there is a potential issue, as there is a meaningless assigment.
