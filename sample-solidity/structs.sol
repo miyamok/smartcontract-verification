@@ -18,16 +18,6 @@ contract Example {
 
     Order[] public orders;
 
-    function f(uint256 key) external payable {
-        Order memory order = orders[key];
-        require(order.buyer == msg.sender);
-        require(order.amount == msg.value);
-        // created -> paid -> ?
-        require(order.status == OrderStatus.Created);
-
-        order.status = OrderStatus.Paid;
-    }
-
     function getOrder(uint256 key) external view returns (Order memory) {
         return orders[key];
     }
@@ -42,6 +32,16 @@ contract Example {
 
     function payment(uint256 key) external payable {
         Order storage order = orders[key];
+        require(order.buyer == msg.sender);
+        require(order.amount == msg.value);
+        // created -> paid -> ?
+        require(order.status == OrderStatus.Created);
+
+        order.status = OrderStatus.Paid;
+    }
+
+    function paymentForgetful(uint256 key) external payable {
+        Order memory order = orders[key];
         require(order.buyer == msg.sender);
         require(order.amount == msg.value);
         // created -> paid -> ?
