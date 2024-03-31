@@ -67,10 +67,11 @@ In function paymentForgetful the following variables are not read after an assig
 ```
 This suggests that there is a potential issue, as there is a meaningless assigment.
 # To do
+<!--
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
 - Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
-
+-->
 # Miscellaneous memorandum
 
 The rest of this page is a memorandum for the project.
