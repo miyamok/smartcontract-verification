@@ -1,5 +1,3 @@
-This note is a preliminary memo for the project.
-
 # Smartcontract Verification
 The objective of this project is to develop software to practice formal verification of smart contracts.
 Due to the immutability of blockchain, the correctness of smart contract code is a crucial issue to secure crypto assets, because a flaw of a source code makes the smart contract vulnerable. 
@@ -16,21 +14,48 @@ The final goal, the correctness of smartcontract, consists of pieces of correctn
 + No selfdestruct reacheability
 <!-- + guaranteeing <code>assert</code> and <code>require</code> -->
 
+# Usage
+Haskell (GHC 9.2.8 checked to work), cabal (3.6.2.0 checked to work), Solidity compiler (solc 0.8.23 checked to work) are required.
+Download the source code from the repository or use git as follows
+```
+$ git clone https://github.com/miyamok/smartcontract-verification/
+```
+then move to the directory <code>smartcontract-verification</code> and issue
+```
+$ cabal run solidity-verification PATH/TO/YOUR/SOLIDITYPROGRAM.sol
+```
+
+# Implemented features
+
+## Definition-Use analysis
+
+### Example
+
+
+# To do
+- Explaining basic logic and the satisfiability problem
+- Write about <code>require</code> and <code>assert</code>.
+- Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
+
+# Miscellaneous memorandum
+
+The rest of this page is a memorandum for the project.
+
 ## Features of the Solidity compiler
 The solidity compiler <code>solc</code> offers helpful features for preventing potential problems of smart contracts.
 Byte code compiled by <code>solc</code> version 0.8.4 or above equips the overflow checking, that is, when there was a runtime arithmetic overflow, it is automatically detected and the execution of the contract gets reverted.  In contract to it, the older <code>solc</code> did not offer this feature, and hence the runtime overflow could lead an unrecoverable failure such as a permanent loss of assets.
 
-# Abstract syntax tree by <code>solc</code>
+## Abstract syntax tree by <code>solc</code>
 The official solidity compiler <code>solc</code> offers the option <code>--ast-compact-json</code> to output the abstract syntax tree in the JSON format.
 Our verification system relies on this feature of <code>solc</code>.
 The description of the solidity AST is available as https://solidity-ast.netlify.app/ .
 
-## Conditionals
+### Conditionals
 Solidity has two kinds of conditionals, namely, <code>if</code>-statement and the ternary expression <code>b ? t : f</code>.
 In the <code>then</code> clause, the verification process carries on assuming the condition holds, while the negation of the condition is taken in the verification of the <code>else</code> clause.
 One target of the verification is detecting an unreachable code segment.
 
-## Functions
+### Functions
 
 A function definition comes inside a contract definition and it involves specifications for its name, parameters, return values, modifiers, and its body.
 ```
@@ -73,7 +98,7 @@ function add(uint x_, uint y_) internal pure returns (uint z, uint) {
 ```
 and the function call <code>add(3, 1)</code> gives <code>(4, 0)</code>, filling the default value <code>0</code> of uint for the second return value.  The same happens when the execution did not come to <code>return</code> even if there is <code>return</code> in the function body.  (a presence of conditional makes such a case probable.)
 
-### Examples
+#### Examples
 Assume a conditional statement (namely, if-then-else) with a boolean expression <code>b</code> (namely, <code>if (b) { ... }</code>), then the execusion reaches the <code>else</code> clause if not <code>b</code> holds.
 If either <code>b</code> or not <code>b</code> is unsatisfiable, the <code>then</code> clause or the <code>else</code> clause is never executed, namely, is unreachable.
 The verifier issues a warning message respecting such an unreachable code.
@@ -103,10 +128,10 @@ if (b1 && (x == (b2 ? y : z)) {
 The reachability of <code>y</code> is checked by the satisfiability of <code>b1 && b2</code>, and the one of <code>z</code> is by <code>b1 && !b2</code>
 On the other hand, the reachability of <code>f1()</code> is checked due to the satisfiability of <code>b1 && ((b2 && x==y) || (!b2 && x==z))</code>, and by its negation, the one of <code>f2()</code> is checked.
 
-## Arrays
+### Arrays
 Solidity offers both statically sized arrays and dynamically sized arrays.
 
-### Examples
+#### Examples
 Consider the following code, assuming solidity version is 0.8.20 or older.
 ```
 uint256[3] nums;
@@ -120,7 +145,7 @@ nums[x] = 61;
 The last substitution is out of bound, as the size of the array <code>nums</code> is 3, hence it causes a run-time error.
 This problem should be statically detected, and it is feasible due to known program analysis techniques.
 
-## Struct
+### Struct
 Variables ranging over array and struct has a modifier such as memory, storage, or calldata, in order to indicate how those data are kept.
 Data on memory are not permanent, and changes are lost, as an example below, when the execution got out from the function scope.
 ```
@@ -132,12 +157,12 @@ function processData(account a) external {
 A concrete case is found in the tutorial by Alchemy University (https://university.alchemy.com/overview/solidity), Section 3, Reference Types, Structs, around 20:00 in the video lecture.
 The problem shown in the lecture video is reproduced by modifying <code>storage</code> to <code>memory</code> at the line 34 of Example.sol in https://github.com/alchemyplatform/learn-solidity-presentations/blob/main/7-structs/examples/0-playing-with-structs/src/Example.sol
 
-## <code>return</code>
+### <code>return</code>
 
 The <code>nodeType</code> of <code>return</code> in the AST output of solc is <code>"Return"</code>, while in the grammer the corresponding rule is return-statement (cf. https://docs.soliditylang.org/en/latest/grammar.html#a4.SolidityParser.returnStatement).
 The AST output is in principle following the grammer definition, just using the CamelCase instead of the hyphen-separation, but it's not always the case and should be checked through the actual output AST from solc.
 
-## assert, require, revert
+### assert, require, revert
 
 assert and require are always function, so the nodeType of those statements are ExpressionStatement.
 revert in Solidity ^0.8.0 is either a function or a statement.  In case it comes with a string argument such as
@@ -158,9 +183,9 @@ the nodeType of this statement is RevertStatement.
 ### Question
 What happens if the implementation has been changed after the moment one called the proxy and before the moment the contract is actually executed.  If this change of the implementation is not detected, the contract can run differently from what is expected at the time to initiate the transaction, that arise a security concern.
 
-# Tips
+## Tips
 
-## Static Verification Feature of Solidity Compiler solc
+### Static Verification Feature of Solidity Compiler solc
 
 solc has its own SMTChecker feature for compile time verification.
 ```
@@ -169,7 +194,7 @@ solc has its own SMTChecker feature for compile time verification.
 In order to enable this feature, one use Linux for dynamic library loading (for z3 etc) or otherwise one has to re-compile the solc compiler with static library linking.
 Cf. https://github.com/ethereum/solidity/issues/14014
 
-## hardhat
+### hardhat
 The following setup procedure is successsful
 ```
 % mkdir myProject && cd myProject
@@ -199,7 +224,7 @@ The following is an unsuccessful procedure (to figure out why)
 % npx hardhat
 ```
 
-## chai.js@^5.0.0 with hardhat
+### chai.js@^5.0.0 with hardhat
 
 In case there is an error such as follows,
 ```
@@ -226,8 +251,3 @@ TypeError: Cannot read properties of undefined (reading 'equal')
 It is further to investigate why the suggestion doesn't work.
 
 chai.js@5 is still new and seems not very stable.  A discussion is found at https://github.com/chaijs/chai/issues/1561 .
-
-# To do
-- Explaining basic logic and the satisfiability problem
-- Write about <code>require</code> and <code>assert</code>.
-- Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
