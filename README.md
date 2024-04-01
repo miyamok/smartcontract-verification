@@ -59,18 +59,19 @@ This change is persistent, and in the future one can see that the payment has be
 Another function <code>paymentForgetful</code> has a problem, although it looks similar as <code>payment</code>.
 The difference is that the local variable <code>order</code> is declared as a <code>memory</code> variable, that means its initial value <code>orders[key]</code> is copied and future change via this local variable <code>order</code> affects this copy.  At the end of this function, the assignment changes this copy, which is obviously diverged from the state variable, and this change is lost when the transaction is over.  In the future, the order status still indicates unpaid even though the buyer has already paid!
 
-Our tool gives a warning message concerning the local memory variable <code>order</code> in as follows.
+Our tool gives a warning message concerning the local memory variable <code>order</code> as follows.
 ```
 $ cabal run solidity-verification sample-solidity/structs.sol
-In function f the following variables are not read after an assignment
+In function paymentForgetful the following variables are not read after an assignment
 "order" declared at line 44
 ```
 This suggests that there is a potential issue, as there is a meaningless assigment.
 # To do
+<!--
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
 - Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
-
+-->
 # Miscellaneous memorandum
 
 The rest of this page is a memorandum for the project.
