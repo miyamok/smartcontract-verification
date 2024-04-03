@@ -81,7 +81,7 @@ In Solidity the evaluation goes in the opposite direction.  The right hand side 
 Although the above coding practice is not at all recommended, it is true that semantics is a delicate issue in formal verification.
 Studying formal semantics of Solidity is a crucial step to develop reliable formal verification methods.
 
-Let's see one more arithmetical example, that is understood as a consequence of the above observation.
+Let's see arithmetical examples a bit more, which are understood as a consequence of the above observation.
 ```
 int x=0;
 x += x++;
@@ -90,6 +90,20 @@ y += ++y;
 ```
 While in Javascript (again, use var instead of int in Javascript) the values of x and y become 0 and 1, in Solidity the values of x and y become 1 and 2, respectively.
 Although the meaning of <code>a += b</code> is <code>a = a + b</code>, that is same in the both languages, the computation order makes the results different.
+```
+int x=0;
+x -= ++x;
+```
+The result x in Solidity is 0, while it is -1 in Javascript.
+
+The tuple allows the following code in Solidity.
+```
+uint x = 0;
+uint y;
+uint z;
+(y,z) = (x, ++x);
+```
+The values of y and z are respectively 0 and 1.  The evaluation goes left to right in the case of tuple, and function arguments work in the same way.
 # To do
 <!--
 - Explaining basic logic and the satisfiability problem
