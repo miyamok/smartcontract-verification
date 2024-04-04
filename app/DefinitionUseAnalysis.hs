@@ -7,10 +7,11 @@ import CFG
 import Data.Maybe
 import Data.List
 import Debug.Trace
+import System.Process (CreateProcess(env))
 
 
 type LVTable = [(String, [Variable], [Variable])] -- A row consists of the src location, LVentry, and LVexit.
-type DUTable = [(String, [String], [Variable], [Variable])]
+type DUTable = [(String, [String], [Variable], [Variable])] -- nodeId, nextNodeIds, updated variables, read variables, 
 
 --------------------------------------------
 ----  Read Variables (gen)
@@ -25,8 +26,9 @@ statementAndEnvironmentToReadVariables stat env
                                 mvars = map (\vn -> varNameAndEnvironmentToVariable vn env) varNames
                               in catMaybes mvars
  | nt == "Return" = let varNames = concatMap expressionToFreeVariableNames $ maybeToList $ statementInReturnFormToReturnExpression stat
-                        vars = catMaybes $ map (\vn -> varNameAndEnvironmentToVariable vn env) varNames
-                     in vars
+                        envs = replicate (length varNames) env
+                        vars = zipWith (\vn e -> varNameAndEnvironmentToVariable vn e) varNames envs
+                     in catMaybes vars
  | nt == "EmitStatement" = emitStatementAndEnvironmentToReadVariables stat env
     where
         nt = nodeType stat
@@ -43,6 +45,21 @@ emitStatementAndEnvironmentToReadVariables stat =
     expressionInFunctionCallFormAndEnvironmentToReadVariables (statementInEmitFormToEventCall stat)
 
 ----- for expression
+
+-- expressionAndEnvironmentToReadVariableNames :: AsValue s => s -> Environment -> [VarName]
+-- expressionAndEnvironmentToReadVariableNames stat env
+--  | nt == "Identifier" = [expressionInIdentifierFormToVariableName stat]
+--  | nt == "UnaryOperation" = expressionToFreeVariableNames $ expressionInUnaryOperationFormToSubExpression stat
+--  | nt == "BinaryOperation" = concatMap expressionToFreeVariableNames (expressionInBinaryOperationFormToExpressions stat)
+--  | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
+--                              ie = expressionInIndexAccessFormToIndexExpression stat
+--                             in expressionToFreeVariableNames be ++ expressionToFreeVariableNames ie
+--  | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName stat]
+--  | nt == "Literal" = []
+--  | nt == "Assignment" = expressionInAssignmentFormAndEnvironmentToReadVariables stat env
+--  | nt == "FunctionCall" = expressionInFunctionCallFormAndEnvironmentToReadVariables stat env
+--     where
+--         nt = nodeType stat
 
 expressionAndEnvironmentToReadVariables :: AsValue s => s -> Environment -> [Variable]
 expressionAndEnvironmentToReadVariables stat env
@@ -67,16 +84,14 @@ expressionInAssignmentFormAndEnvironmentToReadVariables :: AsValue s => s -> Env
 expressionInAssignmentFormAndEnvironmentToReadVariables stat env
  | lftNodeType == "Identifier" = rhtFvars ++ lftReadVars
  | lftNodeType == "MemberAccess" =
-    let mLftVar = expressionInMemberAccessFormToVariable lftExpr
-      in case mLftVar of Nothing -> lftReadVars ++ rhtFvars ++ lftReadVars
-                         Just (lftVarName, lftVarType, lftVarSrc) ->
-                            let x = do lftVar <- varNameAndEnvironmentToVariable lftVarName env
-                                       pointedVar <- pointerVariableAndEnvironmentToPointedVariable lftVar env
-                                       return lftVar
-                             in maybeToList x
-        -- should exactly count parameters occurring in the left expression!
-        -- should not contain non-variables! (currently, enum objects are included)
-     --in lftFvars ++ rhtFvars ++ lftReadVars
+    let (lftVarName, lftVarType, lftVarSrc) = fromJust $ expressionInMemberAccessFormToVariable lftExpr -- never be Nothing as it is LHS of "="
+        lftVar = fromJust $ varNameAndEnvironmentToVariable lftVarName env
+        mPointedVar = pointerVariableAndEnvironmentToPointedVariable lftVar env
+      in case mPointedVar of Nothing -> nub $ [ v | v <- lftFvars, v /= lftVar] ++ rhtFvars
+                             Just pVar -> nub $ lftFvars ++ rhtFvars
+    --     mPointedVar = pointerVariableAndEnvironmentToPointedVariable lftVar env
+    --   in case mPointedVar of Nothing -> [lftVar]
+    --                          Just pVar -> [pVar]
  | lftNodeType == "IndexAccess" =
     let idxExpr = expressionInIndexAccessFormToIndexExpression lftExpr
         idxFvarNames = expressionToFreeVariableNames idxExpr
@@ -120,7 +135,10 @@ statementAndEnvironmentToUpdatedVariableNames stat env
  | nt == "VariableDeclarationStatement" = variableDeclarationStatementAndEnvironmentToUpdatedVariableNames stat env
  | nt == "ExpressionStatement" = expressionAndEnvironmentToUpdatedVariableNames (expressionStatementToExpression stat) env
  | nt == "WhileStatement" = expressionAndEnvironmentToUpdatedVariableNames (statementInWhileFormToConditionalExpression stat) env
- | nt == "Return" = undefined
+ | nt == "Return" = let mExpr = statementInReturnFormToReturnExpression stat
+                     in concatMap (`expressionAndEnvironmentToUpdatedVariableNames` env) (maybeToList mExpr)
+ | nt == "EmitStatement" = let mExprs = statementInEmitFormToEmitExpressions stat
+                            in concatMap (`expressionAndEnvironmentToUpdatedVariableNames` env) mExprs
     where
         nt = nodeType stat
 
@@ -134,6 +152,8 @@ statementAndEnvironmentToUpdatedVariables stat env
  | nt == "EmitStatement" = emitStatementAndEnvironmentToUpdatedVariables stat env
     where
         nt = nodeType stat
+        -- varNames = statementAndEnvironmentToUpdatedVariableNames stat env
+        -- vars = catMaybes $ map (\varName -> varNameAndEnvironmentToVariable varName env) varNames
 
 emitStatementAndEnvironmentToUpdatedVariables :: AsValue s => s -> Environment -> [Variable]
 emitStatementAndEnvironmentToUpdatedVariables stat =
@@ -151,9 +171,9 @@ variableDeclarationStatementAndEnvironmentToUpdatedVariables :: AsValue s => s -
 variableDeclarationStatementAndEnvironmentToUpdatedVariables stat env =
     var:vars
     where
-        expr = maybeToList $ variableDeclarationStatementToInitialValue stat
+        varNames = variableDeclarationStatementAndEnvironmentToUpdatedVariableNames stat env
+        vars = mapMaybe (`varNameAndEnvironmentToVariable` env) varNames
         var = variableDeclarationStatementToDeclaredVariable stat
-        vars = concatMap (\e -> expressionAndEnvironmentToUpdatedVariables e env) expr
 
 ----- for expression
 
@@ -161,9 +181,13 @@ expressionAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment 
 expressionAndEnvironmentToUpdatedVariableNames stat env
  | nt == "Identifier" = []
  | nt == "UnaryOperation" = let subExpr = expressionInUnaryOperationFormToSubExpression stat
-                                op = expressionInUnaryOperationFormToOperator stat
-                              in [expressionInIdentifierFormToVariableName subExpr | isIncrementOrDecrementOperator op]
- | nt == "BinaryOperation" = concatMap (\e -> expressionAndEnvironmentToUpdatedVariableNames e env) (expressionInBinaryOperationFormToExpressions stat)
+                                (isPrefix, op) = expressionInUnaryOperationFormToOperator stat
+                              in [expressionInIdentifierFormToVariableName subExpr | isIncrementOrDecrementOperator op, not isPrefix]
+ | nt == "BinaryOperation" = let [lftExpr, rhtExpr] = expressionInBinaryOperationFormToExpressions stat
+                                 lftUpdatedVarNames = expressionAndEnvironmentToUpdatedVariableNames lftExpr env
+                                 rhtUpdatedVarNames = expressionAndEnvironmentToUpdatedVariableNames rhtExpr env
+                                 lftReadVarNames = [ varName | (varName, _, _) <- expressionAndEnvironmentToReadVariables lftExpr env]
+                                in [ varNames | varNames <- rhtUpdatedVarNames, varNames `notElem` lftReadVarNames] ++ lftUpdatedVarNames
  | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
                              ie = expressionInIndexAccessFormToIndexExpression stat
                             in expressionAndEnvironmentToUpdatedVariableNames be env ++ expressionAndEnvironmentToUpdatedVariableNames ie env
@@ -171,25 +195,44 @@ expressionAndEnvironmentToUpdatedVariableNames stat env
  | nt == "Literal" = []
  | nt == "Assignment" = expressionInAssignmentFormAndEnvironmentToUpdatedVariableNames stat env
  | nt == "FunctionCall" = expressionInFunctionCallFormAndEnvironmentToUpdatedVariableNames stat env
+ | nt == "TupleExpression" = concatMap (`expressionAndEnvironmentToUpdatedVariableNames` env) $ expressionInTupleFormToComponents stat
     where
         nt = nodeType stat
 
 expressionAndEnvironmentToUpdatedVariables :: AsValue s => s -> Environment -> [Variable]
-expressionAndEnvironmentToUpdatedVariables stat env
- | nt == "Identifier" = []
- | nt == "UnaryOperation" = let subExpr = expressionInUnaryOperationFormToSubExpression stat
-                                op = expressionInUnaryOperationFormToOperator stat
-                              in [expressionInIdentifierFormToVariable subExpr | isIncrementOrDecrementOperator op]
- | nt == "BinaryOperation" = concatMap (\e -> expressionAndEnvironmentToUpdatedVariables e env) (expressionInBinaryOperationFormToExpressions stat)
- | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
-                             ie = expressionInIndexAccessFormToIndexExpression stat
-                            in expressionAndEnvironmentToUpdatedVariables be env ++ expressionAndEnvironmentToUpdatedVariables ie env
- | nt == "MemberAccess" = [] --maybeToList $ expressionInMemberAccessFormToVariable stat
- | nt == "Literal" = []
- | nt == "Assignment" = expressionInAssignmentFormAndEnvironmentToUpdatedVariables stat env
- | nt == "FunctionCall" = expressionInFunctionCallFormAndEnvironmentToUpdatedVariables stat env
+-- expressionAndEnvironmentToUpdatedVariables stat env = vars
+--     where
+--         varNames = expressionAndEnvironmentToUpdatedVariableNames stat env
+--         vars = mapMaybe (`varNameAndEnvironmentToVariable` env) varNames
+
+expressionAndEnvironmentToUpdatedVariables stat env =
+    vars
     where
-        nt = nodeType stat
+        varNames = expressionAndEnvironmentToUpdatedVariableNames stat env
+        vars = mapMaybe (`varNameAndEnvironmentToVariable` env) varNames
+--  | nt == "Identifier" = []
+--  | nt == "UnaryOperation" = let subExpr = expressionInUnaryOperationFormToSubExpression stat
+--                                 (isPrefix, op) = expressionInUnaryOperationFormToOperator stat
+--                              in if isIncrementOrDecrementOperator op
+--                                 then [expressionInIdentifierFormToVariable subExpr]
+--                                 else []
+--  | nt == "BinaryOperation" =
+--     let [lftExpr, rhtExpr] = expressionInBinaryOperationFormToExpressions stat
+--         lftUpdatedVars = traceShowId $ expressionAndEnvironmentToUpdatedVariables lftExpr env
+--         rhtUpdatedVars = expressionAndEnvironmentToUpdatedVariables rhtExpr env
+--         lftReadVars = expressionAndEnvironmentToReadVariables lftExpr env
+--      in [ vars | vars <- rhtUpdatedVars, vars `notElem` lftReadVars] ++ lftUpdatedVars
+--  | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
+--                              ie = expressionInIndexAccessFormToIndexExpression stat
+--                             in expressionAndEnvironmentToUpdatedVariables be env ++ expressionAndEnvironmentToUpdatedVariables ie env
+--  | nt == "MemberAccess" = [] --maybeToList $ expressionInMemberAccessFormToVariable stat
+--  | nt == "Literal" = []
+--  | nt == "Assignment" = expressionInAssignmentFormAndEnvironmentToUpdatedVariables stat env
+--  | nt == "FunctionCall" = expressionInFunctionCallFormAndEnvironmentToUpdatedVariables stat env
+--  | nt == "TupleExpression" = concatMap (`expressionAndEnvironmentToUpdatedVariables` env) $ expressionInTupleFormToComponents stat
+
+--     where
+--         nt = nodeType stat
 
 expressionInFunctionCallFormAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 expressionInFunctionCallFormAndEnvironmentToUpdatedVariableNames stat env =
@@ -206,31 +249,52 @@ expressionInFunctionCallFormAndEnvironmentToUpdatedVariables stat env =
 -- generally several variables (eg. tuple unpacking)
 expressionInAssignmentFormAndEnvironmentToUpdatedVariableNames :: AsValue s => s -> Environment -> [VarName]
 expressionInAssignmentFormAndEnvironmentToUpdatedVariableNames stat env
- | nt == "Identifier" = [expressionInIdentifierFormToVariableName leftExpr]
- | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName leftExpr]
- | nt == "IndexAccess" =
+ | leftNt == "Identifier" = expressionInIdentifierFormToVariableName leftExpr:rightUpdatedVarNames
+ | leftNt == "MemberAccess" =
+    let objName = expressionInMemberAccessFormToObjectName leftExpr
+        mVar = varNameAndEnvironmentToVariable objName env
+        ptrs = environmentToStoragePointers env
+      in case mVar of Nothing -> []
+                      Just (varName, varType, varSrc) ->
+                        case pointerVariableAndEnvironmentToPointedVariable (varName, varType, varSrc) env
+                                    of Nothing -> [varName]
+                                       Just (pVarName, _, _) -> [pVarName]
+--expressionInMemberAccessFormToObjectName leftExpr:rightUpdatedVarNames
+ | leftNt == "IndexAccess" =
     let baseExpr = expressionInIndexAccessFormToBaseExpression leftExpr
-      in expressionToFreeVariableNames baseExpr
+      in expressionToFreeVariableNames baseExpr ++ rightUpdatedVarNames
     where
         leftExpr = expressionInAssignmentFormToLeftExpression stat
-        nt = nodeType leftExpr
+        rightExpr = expressionInAssignmentFormToRightExpression stat
+        rightUpdatedVarNames = expressionAndEnvironmentToUpdatedVariableNames rightExpr env
+        leftNt = nodeType leftExpr
 
 expressionInAssignmentFormAndEnvironmentToUpdatedVariables :: AsValue s => s -> Environment -> [Variable]
-expressionInAssignmentFormAndEnvironmentToUpdatedVariables stat env
- | nt == "Identifier" = [expressionInIdentifierFormToVariable leftExpr]
- | nt == "MemberAccess" = let objName = expressionInMemberAccessFormToObjectName leftExpr
-                              mVar = varNameAndEnvironmentToVariable objName env
-                              ptrs = environmentToStoragePointers env
-                            in case mVar of Nothing -> []
-                                            Just var -> case pointerVariableAndEnvironmentToPointedVariable var env
-                                                of Nothing -> [var]
-                                                   Just pointee -> [pointee]
- | nt == "IndexAccess" =
-    let baseExpr = expressionInIndexAccessFormToBaseExpression leftExpr
-      in expressionToFreeVariables baseExpr
+expressionInAssignmentFormAndEnvironmentToUpdatedVariables stat env = vars
     where
-        leftExpr = expressionInAssignmentFormToLeftExpression stat
-        nt = nodeType leftExpr
+        varNames = expressionInAssignmentFormAndEnvironmentToUpdatedVariableNames stat env
+        vars = mapMaybe (`varNameAndEnvironmentToVariable` env) varNames
+
+--  | leftNt == "Identifier" = let leftVarName = expressionInIdentifierFormToVariableName leftExpr
+--                                 leftVar = varNameAndEnvironmentToVariable leftVarName env
+--                           in maybeToList leftVar
+--  | leftNt == "MemberAccess" = let objName = expressionInMemberAccessFormToObjectName leftExpr
+--                                   mVar = varNameAndEnvironmentToVariable objName env
+--                                   ptrs = environmentToStoragePointers env
+--                             in case mVar of Nothing -> []
+--                                             Just var -> case pointerVariableAndEnvironmentToPointedVariable var env
+--                                                 of Nothing -> [var]
+--                                                    Just pointee -> [pointee]
+--  | leftNt == "IndexAccess" =
+--     let baseExpr = expressionInIndexAccessFormToBaseExpression leftExpr
+--       in if nodeType baseExpr == "Identifier"
+--         then let vn = expressionInIdentifierFormToVariableName baseExpr
+--                  mVar = varNameAndEnvironmentToVariable vn env
+--                in maybeToList mVar
+--         else undefined
+--     where
+--         leftExpr = expressionInAssignmentFormToLeftExpression stat
+--         leftNt = nodeType leftExpr
 
 --------------------------------------------------
 ---- definition-use analysis
@@ -246,7 +310,6 @@ cFGEdgesToDefinitionUseTable (((stat, env), nodeId, nextNodeIds):cFGEdges)
         restTable = cFGEdgesToDefinitionUseTable cFGEdges
 
 cFGEdgesToUnreadVariables :: CFGEdges -> [Variable]
-cFGEdgesToUnreadVariables [] = []
 cFGEdgesToUnreadVariables cFGEdges = localUnreadVars
     where
         definitionUseTable = cFGEdgesToDefinitionUseTable cFGEdges
@@ -258,12 +321,22 @@ cFGEdgesToUnreadVariables cFGEdges = localUnreadVars
         localUnreadVars = [ var | var <- unreadVars, var `notElem` nonLocalVars]
 
 definitionUseTableToUnreadVariables :: DUTable -> [Variable]
-definitionUseTableToUnreadVariables [] = []
-definitionUseTableToUnreadVariables ((nodeId, nextNodeIds, updatedVars, readVars):definitionUseTable) =
-    unreadVars ++ definitionUseTableToUnreadVariables definitionUseTable
+definitionUseTableToUnreadVariables = definitionUseTableToUnreadVariablesAux []
+-- definitionUseTableToUnreadVariables ((nodeId, nextNodeIds, updatedVars, readVars):definitionUseTable) =
+--     unreadVars ++ definitionUseTableToUnreadVariables definitionUseTable
+--     where
+--         readVars = concatMap (definitionUseTableAndNodeIdToReadVariables definitionUseTable) nextNodeIds
+--         unreadVars = [ var | var <- updatedVars, var `notElem` readVars ]
+
+definitionUseTableToUnreadVariablesAux :: [Variable] -> DUTable -> [Variable]
+definitionUseTableToUnreadVariablesAux unreadVars [] = unreadVars
+definitionUseTableToUnreadVariablesAux unreadVars ((nodeId, nextNodeIds, updatedVars, readVars):definitionUseTable) =
+    definitionUseTableToUnreadVariablesAux unreadVars' definitionUseTable
     where
-        readVars = concatMap (definitionUseTableAndNodeIdToReadVariables definitionUseTable) nextNodeIds
-        unreadVars = [ var | var <- updatedVars, var `notElem` readVars ]
+        unreadVars' = nub ([ var | var <- unreadVars, var `notElem` readVars] ++ updatedVars)
+
+--        readVars = concatMap (definitionUseTableAndNodeIdToReadVariables definitionUseTable) nextNodeIds
+--        unreadVars' = [ var | var <- updatedVars, var `notElem` readVars ]
 
 definitionUseTableAndNodeIdToReadVariables :: DUTable -> String -> [Variable]
 definitionUseTableAndNodeIdToReadVariables definitionUseTable nodeId =
@@ -320,7 +393,7 @@ definitionUseTableAndNodeIdToReadVariables definitionUseTable nodeId =
 -- --                    env' = removeLocalVariablesInEnvironment env
 -- --                 in [ v' | VarDef i v' <- env']
 --     where
---         -- finNodes = traceShowId $ cFGEdgesToFinalNodes cFGEdges
+--         -- finNodes = cFGEdgesToFinalNodes cFGEdges
 --         isFinalNode = not $ null [ nodeId' | (info, nodeId', nextNodeIds) <- cFGEdgesToFinalNodes cFGEdges, nodeId' == nodeId]
 --         prevNodeIds = [ nodeId' | ( _, nodeId', nextNodes) <- cFGEdges, nodeId `elem` nextNodes ]
 --         nextNodeIds = head [ nextNodeIds | ( _, nodeId', nextNodeIds) <- cFGEdges, nodeId == nodeId' ]

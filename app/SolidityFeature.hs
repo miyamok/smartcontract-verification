@@ -17,6 +17,7 @@ import Debug.Trace
 type CFGMatrix = (Value, Int, [Int])
 type VarName = String
 type Variable = (VarName, String, String) -- name, type, and src (pointing the declaration statement, but no nameLocation!)
+type UnaryOperator = (Bool, String) -- isPrefix and operator in string
 
 absolutePath :: AsValue s => s -> Maybe Text
 absolutePath t = t ^? key "absolutePath" . _String
@@ -24,8 +25,8 @@ absolutePath t = t ^? key "absolutePath" . _String
 contracts :: AsValue s => s -> [Value]
 contracts t = t ^.. key "nodes" . values . filtered (has (key "nodeType" . _String . only "ContractDefinition"))
 
-contractToContractName :: AsValue s => s -> Text
-contractToContractName t = head $ t ^.. key "name" . _String
+contractToContractName :: AsValue s => s -> String
+contractToContractName t = unpack $ head $ t ^.. key "name" . _String
 
 contractNameToVariableDeclarations :: AsValue s => s -> String -> [Value]
 contractNameToVariableDeclarations t contractName = t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "VariableDeclaration"))
@@ -198,13 +199,27 @@ printProfile :: AsValue s => s -> IO ()
 printProfile t = do for_ (contracts t) printContractProfile
 
 printContractProfile :: AsValue s => s -> IO ()
-printContractProfile t = do putStrLn $ "Contract name: " ++ unpack cName
+printContractProfile t = do putStrLn $ "Contract name: " ++ cName
                             putStrLn $ "Declared variable names: " ++ show vs
                             putStrLn $ "Defined function names: " ++ show fs
                             putStrLn $ "Defined enum names: " ++ show es
                             putStrLn $ "Defined struct names: " ++ show ss
                             putStrLn $ "Defined event names: " ++ show es
                             putStrLn $ "Defined error names: " ++ show errs
+    where
+        cName = contractToContractName t
+        vs = map variableDeclarationToName $ contractToStateVariableDeclarations t
+        fs = map functionDefinitionToName $ contractToFunctionDefinitions t
+        ss = map structDefinitionToName $ contractToStructDefinitions t
+        es = map enumDefinitionToName $ contractToEnumDefinitions t
+        errs = map errorDefinitionToName $ contractToErrorDefinitions t
+        evs = map eventDefinitionToName $ contractToEventDefinitions t
+
+showContractProfile :: AsValue s => s -> String
+showContractProfile t =
+    intercalate "\n" ["Contract name: " ++ cName, "Declared variable names: " ++ show vs, "Defined function names: " ++ show fs,
+                        "Defined enum names: " ++ show es, "Defined struct names: " ++ show ss, "Defined event names: " ++ show es,
+                        "Defined error names: " ++ show errs]
     where
         cName = contractToContractName t
         vs = map variableDeclarationToName $ contractToStateVariableDeclarations t
@@ -251,30 +266,33 @@ expressionToFreeVariableNames :: AsValue s => s -> [VarName]
 expressionToFreeVariableNames t = nub $ expressionToFreeVariableNamesAux t
 
 expressionToFreeVariableNamesAux :: AsValue s => s -> [VarName]
-expressionToFreeVariableNamesAux stat
- | nt == "Identifier" = [expressionInIdentifierFormToVariableName stat]
- | nt == "UnaryOperation" = expressionToFreeVariableNamesAux (expressionInUnaryOperationFormToSubExpression stat)
- | nt == "BinaryOperation" = concatMap expressionToFreeVariableNamesAux (expressionInBinaryOperationFormToExpressions stat)
- | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression stat
-                             ie = expressionInIndexAccessFormToIndexExpression stat
+expressionToFreeVariableNamesAux t
+ | nt == "Identifier" = [expressionInIdentifierFormToVariableName t]
+ | nt == "UnaryOperation" = expressionToFreeVariableNamesAux (expressionInUnaryOperationFormToSubExpression t)
+ | nt == "BinaryOperation" = concatMap expressionToFreeVariableNamesAux (expressionInBinaryOperationFormToExpressions t)
+ | nt == "IndexAccess" = let be = expressionInIndexAccessFormToBaseExpression t
+                             ie = expressionInIndexAccessFormToIndexExpression t
                             in expressionToFreeVariableNamesAux be ++ expressionToFreeVariableNamesAux ie
- | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName stat]
+ | nt == "MemberAccess" = [expressionInMemberAccessFormToObjectName t]
  | nt == "Literal" = []
- | nt == "FunctionCall" = concatMap expressionToFreeVariableNamesAux $ expressionInFunctionCallFormToArguments stat
-    where
-        nt = nodeType stat
-
-expressionToPointableObjectName :: AsValue s => s -> Maybe String
-expressionToPointableObjectName t
- | nt == "Identifier" = Just $ expressionInIdentifierFormToVariableName t
- | nt == "UnaryOperation" = Nothing
- | nt == "BinaryOperation" = Nothing
- | nt == "IndexAccess" = expressionToPointableObjectName $ expressionInIndexAccessFormToBaseExpression t
- | nt == "MemberAccess" = expressionToPointableObjectName $ expressionInMemberAccessFormToObjectName t
- | nt == "Literal" = Nothing
+ | nt == "FunctionCall" = concatMap expressionToFreeVariableNamesAux $ expressionInFunctionCallFormToArguments t
+ | nt == "TupleExpression" = concatMap expressionToFreeVariableNamesAux $ expressionInTupleFormToComponents t
     where
         nt = nodeType t
 
+expressionInTupleFormToComponents :: AsValue s => s -> [Value]
+expressionInTupleFormToComponents t = t ^.. key "components" . values
+
+expressionToPointableStorageVariableName :: AsValue s => s -> Maybe String
+expressionToPointableStorageVariableName t
+ | nt == "Identifier" = Just $ expressionInIdentifierFormToVariableName t
+ | nt == "UnaryOperation" = Nothing
+ | nt == "BinaryOperation" = Nothing
+ | nt == "IndexAccess" = expressionToPointableStorageVariableName $ expressionInIndexAccessFormToBaseExpression t
+ | nt == "MemberAccess" = expressionToPointableStorageVariableName $ expressionInMemberAccessFormToObjectName t
+ | nt == "Literal" = Nothing
+    where
+        nt = nodeType t
 
 expressionInMemberAccessFormToMemberName :: AsValue s => s -> String
 expressionInMemberAccessFormToMemberName stat = unpack $ head $ stat ^.. key "memberName" . _String
@@ -315,8 +333,11 @@ expressionInBinaryOperationFormToExpressions stat = lhs ++ rhs
 expressionInUnaryOperationFormToSubExpression :: AsValue s => s -> Value
 expressionInUnaryOperationFormToSubExpression stat = head $ stat ^.. key "subExpression"
 
-expressionInUnaryOperationFormToOperator :: AsValue s => s -> String
-expressionInUnaryOperationFormToOperator stat = unpack $ head $ stat ^.. key "operator" . _String
+expressionInUnaryOperationFormToOperator :: AsValue s => s -> UnaryOperator
+expressionInUnaryOperationFormToOperator stat = (isPrefix, op)
+    where
+        isPrefix = head $ stat ^.. key "prefix" . _Bool
+        op = unpack $ head $ stat ^.. key "operator" . _String
 
 functionDefinitionToBodyStatements :: AsValue s => s -> [Value]
 functionDefinitionToBodyStatements t = t ^.. key "body" . key "statements" . values
@@ -367,6 +388,12 @@ statementInReturnFormToReturnExpression stat = stat ^? key "expression"
 
 statementInEmitFormToEventCall :: AsValue s => s -> Value
 statementInEmitFormToEventCall stat = head $ stat ^.. key "eventCall"
+
+statementInEmitFormToEmitExpressions :: AsValue s => s -> [Value]
+statementInEmitFormToEmitExpressions stat = argExprs
+    where
+        functionCallExpr = statementInEmitFormToEventCall stat
+        argExprs = expressionInFunctionCallFormToArguments functionCallExpr
 
 expressionInAssignmentFormToOperator :: AsValue s => s -> String
 expressionInAssignmentFormToOperator stat =unpack $ head $ stat ^.. key "operator" . _String

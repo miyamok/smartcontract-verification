@@ -1,23 +1,53 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+contract Simpl {
+    function id() public returns (uint) {
+        uint x;
+        x = 3;
+        return x+1;
+    }
+}
+
 contract Counter {
-    uint public count = f(1)==1 ? 4 : 0;
+    uint public count = 0;
     event FunctionCalled();
     uint[] public counters;
 
     error CustomError();
-    function f(uint8 x) public returns (uint16 z) {
-        uint y=x++;
-        while (++y>0) {
-            y -= 1;
-            //x += y;
-        }
-        z=x+1;
-        counters[x] += z;
-        z+=x;
+
+    function f0(uint x) public returns (uint) {
+        uint y = ++x + x; // x is used, hence there should be no warning.
+        return y;
     }
 
+    function f1(uint x) public returns (uint) {
+        uint y = x++ + x; // x is not used after incrementing itself.
+        return y;
+    }
+
+    function f2(uint x) public returns (uint) {
+        uint y = x + ++x;
+        return y;
+    }
+
+    function f3(uint x) public returns (uint) {
+        uint y = x + x++;
+        return y;
+    }
+
+    function f4(uint8 x) public returns (uint) {
+        uint16 z;
+        uint8 y = x++ + x; // here x is updated and will never be used later. 
+        /* while (++y>0) {
+            y -= 1;
+            //x += y;
+        } */
+        z=y;
+        counters[y] = 1;
+        z+=y; // z is updated and won't be used.
+        return y;
+    }
     // Function to get the current count
     function get() public view returns (uint) {
         return count;

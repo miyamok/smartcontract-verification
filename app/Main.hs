@@ -25,7 +25,8 @@ import SolidityFeature
 import Data.Text.Lazy.Encoding as TLE ()
 import Data.Foldable (for_)
 import CFG
-import DefinitionUseAnalysis ( cFGEdgesToUnreadVariables )
+import DefinitionUseAnalysis ( cFGEdgesToUnreadVariables, cFGEdgesToDefinitionUseTable )
+import Debug.Trace
 
 argsToOptsAndFilename :: [Text] -> ([Text], [Text])
 argsToOptsAndFilename args = ([], args)
@@ -66,7 +67,10 @@ main = do args <- getArgs
                     let functionNamesList = map (map functionDefinitionToName) functionsList
                     let cfgsList = map contractToCFGEdgesList cs
                     let unreadsList = map (map cFGEdgesToUnreadVariables) cfgsList
-                    let fnUnreads = map (filter (\(fn, unreads) -> length unreads /= 0)) $ zipWith zip functionNamesList unreadsList
+                    let functionNameAndUnreadVarsList = zipWith zip functionNamesList unreadsList
+                    let fnUnreads = map (filter (\(fn, unreads) -> not $ null unreads)) functionNameAndUnreadVarsList
                     text <- readFile $ unpack filename
                     let output = concatMap (map (uncurry (showFunctionNameAndUnreadVariables text))) fnUnreads
+                    putStrLn $ Data.List.intercalate "\n\n" (map showContractProfile cs)
+                    putStrLn ""
                     putStrLn $ Data.List.intercalate "\n\n" output

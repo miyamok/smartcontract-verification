@@ -10,7 +10,12 @@ import Debug.Trace
 type CFGNode = ((Value, Environment), String, [String])
 -- to constract a Data.Graph via Data.Graph.graphFromEdges
 type CFGEdges = [CFGNode]
+
 data VarInfo = VarDef Int Variable | StoragePointer Variable Variable deriving (Show, Eq)
+
+-- Renaming?
+-- Currently, Environemnt is just a list of available variables and what points what,
+-- but it doesn't contain a mapping from an ordinary variable to its value.
 type Environment = [VarInfo]
 
 variableToLocalVarDef :: Variable -> VarInfo
@@ -78,8 +83,9 @@ lookupVariableInEnvironment var (StoragePointer src dst:env)
 lookupVarNameInEnvironment :: VarName -> Environment -> [VarInfo]
 lookupVarNameInEnvironment _ [] = []
 lookupVarNameInEnvironment varName (VarDef i v:env)
- | varName == variableToVarName v = VarDef i v:lookupVarNameInEnvironment varName env
+ | varName == vn = VarDef i v:lookupVarNameInEnvironment varName env
  | otherwise = lookupVarNameInEnvironment varName env
+    where (vn, vt, vsrc) = v
 lookupVarNameInEnvironment varName (StoragePointer src dst:env)
  | varName == variableToVarName src = StoragePointer src dst:lookupVarNameInEnvironment varName env
  | otherwise = lookupVarNameInEnvironment varName env
@@ -87,7 +93,7 @@ lookupVarNameInEnvironment varName (StoragePointer src dst:env)
 varNameAndEnvironmentToVariable :: VarName -> Environment -> Maybe Variable
 varNameAndEnvironmentToVariable n env = listToMaybe [ v | VarDef minLevel v <- varInfos ]
     where
-        varInfos = lookupVarNameInEnvironment n env
+        varInfos = lookupVarNameInEnvironment (n) (env)
         minLevel = minimum [ i | VarDef i _ <- varInfos ]
 
 pointerVariableAndEnvironmentToPointedVariable :: Variable -> Environment -> Maybe Variable
@@ -172,6 +178,51 @@ functionAndEnvironmentToCFGEdgesList t env = statementsAndEnvironmentToCFGEdgesL
 statementsAndEnvironmentToCFGEdgesList :: [Value] -> Environment -> [CFGEdges]
 statementsAndEnvironmentToCFGEdgesList stats env = statementsAndEnvironmentToCFGEdgesListAux Nothing stats env [] []
 
+statementAndEnvironmentToUpdatedEnvironment :: Value -> Environment -> Environment
+statementAndEnvironmentToUpdatedEnvironment stat env
+    | nt == "Block" = incrementEnvironmentLevel env
+    | nt == "VariableDeclarationStatement" = let var = variableDeclarationStatementToDeclaredVariable stat
+                                                 varDef = variableToLocalVarDef var
+                                                 decl = variableDeclarationStatementToVariableDeclaration stat
+                                                 isStorageVariableDeclaration = "storage" == variableDeclarationToStorageLocation decl
+                                                in if isStorageVariableDeclaration
+                                                    then let mInitValueVariable =
+                                                                    do initValue <- variableDeclarationStatementToInitialValue stat
+                                                                       objName <- expressionToPointableStorageVariableName initValue
+                                                                       VarDef i v <- listToMaybe $ lookupVarNameInEnvironment objName varDefs
+                                                                       return v
+                                                             mPointer = fmap (StoragePointer var) mInitValueVariable
+                                                            in varDef:env ++ maybeToList mPointer
+                                                    else varDef:env
+    --- To clarify: in Expression Statement, no new variable is declared, but it can update an assignment concerning a storage pointer.
+    --- question.  is there a use of "x=a" in another expression (eg. as an argument of a function call like "f(x=a, b)") which changes the pointer?
+    | nt == "ExpressionStatement" = let expr = expressionStatementToExpression stat
+                                        ntExpr = nodeType expr
+                                        env' = if ntExpr == "Assignment" -- && variableDeclarationToStorageLocation stat == "storage"
+                                                    then let lExpr = expressionInAssignmentFormToLeftExpression expr
+                                                             var = expressionInIdentifierFormToVariable lExpr
+                                                             isStorage = [ vsrc | StoragePointer vsrc vdst <- varDefs ]
+                                                             --varDefs = lookupVariableInEnvironment var env 
+                                                             rExpr = expressionInAssignmentFormToRightExpression expr
+                                                             mPointedVar =
+                                                                do objName <- expressionToPointableStorageVariableName rExpr
+                                                                   VarDef i v <- listToMaybe $ lookupVarNameInEnvironment objName varDefs
+                                                                   return v
+                                                             mPointer = fmap (StoragePointer var) mPointedVar
+                                                            in env ++ maybeToList mPointer
+                                                    else env
+                                      in env'
+    | nt == "EmitStatement" = env
+    | nt == "RevertStatement" = env
+    | nt == "Return" = env
+    | nt == "IfStatement" = env
+    | otherwise = env
+    where
+        nt = nodeType stat
+        id = src stat
+        node = (stat, env)
+        varDefs = environmentToVarDefs env
+
 statementsAndEnvironmentToCFGEdgesListAux :: Maybe String -> [Value] -> Environment -> CFGEdges -> [CFGEdges] -> [CFGEdges]
 statementsAndEnvironmentToCFGEdgesListAux _ [] env es ess = es:ess
 statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId (stat:stats) env es ess
@@ -181,37 +232,9 @@ statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId (stat:stats) env es e
                           ess' = ess ++ statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId innerStats env' [] []
                       in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
     | nt == "VariableDeclarationStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
-                                                 var = variableDeclarationStatementToDeclaredVariable stat
-                                                 varDefs = environmentToVarDefs env
-                                                 mInitValueVariable = do initValue <- variableDeclarationStatementToInitialValue stat
-                                                                         objName <- expressionToPointableObjectName initValue
-                                                                         VarDef i v <- listToMaybe $ lookupVarNameInEnvironment objName varDefs
-                                                                         return v
-                                                 decl = variableDeclarationStatementToVariableDeclaration stat
-                                                 sLoc = variableDeclarationToStorageLocation decl
-                                                 mStoragePointer = if sLoc == "storage"
-                                                        then fmap (StoragePointer var) mInitValueVariable
-                                                        else Nothing
-                                                 x = maybeToList mStoragePointer
-                                                 newEnv = variableToLocalVarDef var:env ++ x
                                              in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
     | nt == "ExpressionStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
-                                        expr = expressionStatementToExpression stat
-                                        ntExpr = nodeType expr
-                                        env' = if ntExpr == "Assignment" && variableDeclarationToStorageLocation stat == "storage"
-                                            -- repeated. a function should be defined.
-                                            then let varDefs = environmentToVarDefs env
-                                                     var = variableDeclarationStatementToDeclaredVariable stat
-                                                     mInitValueVariable = do initValue <- variableDeclarationStatementToInitialValue stat
-                                                                             objName <- expressionToPointableObjectName initValue
-                                                                             VarDef i v <- listToMaybe $ lookupVarNameInEnvironment objName varDefs
-                                                                             return v
-                                                     mStoragePointer = if variableDeclarationToStorageLocation stat == "storage"
-                                                            then fmap (StoragePointer var) mInitValueVariable
-                                                            else Nothing
-                                                   in env ++ maybeToList mStoragePointer
-                                            else env
-                                     in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env' es' ess
+                                     in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
     | nt == "EmitStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
                               in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
     | nt == "RevertStatement" = let es' = es ++ [(node, id, [])]
@@ -229,17 +252,16 @@ statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId (stat:stats) env es e
                                 ess' = if withoutFalseBody
                                        then ess ++ trueCaseCFGEdges
                                        else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
-                                -- (es', ess') = if withoutFalseBody
-                                --     then (es ++ [(stat, id, src (head trueCaseStatements):nextNodeIdList)], ess ++ trueCaseCFGEdges)
-                                --     else (es ++ [(stat, id, map (src . head) [trueCaseStatements, falseCaseStatements])], ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges)
                             in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
-    | otherwise = let es' = es ++ [(node, id, ["END"])]
-                  in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
+    -- | otherwise = let es' = es ++ [(node, id, ["END"])]
+    --               in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
     where
         nt = nodeType stat
         id = src stat
         nextNodeIdList = if null stats then maybeToList mFollowingNodeId else [src $ head stats]
         node = (stat, env)
+        varDefs = environmentToVarDefs env
+        newEnv = statementAndEnvironmentToUpdatedEnvironment stat env
 
 -- followingNodeIdAndStatementsToCFGEdgesListAux :: Maybe String -> [Value] -> CFGEdges -> [CFGEdges] -> [CFGEdges]
 -- followingNodeIdAndStatementsToCFGEdgesListAux _ [] es ess = es:ess
