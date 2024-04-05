@@ -66,6 +66,44 @@ In function paymentForgetful the following variables are not read after an assig
 "order" declared at line 44
 ```
 This suggests that there is a potential issue, as there is a meaningless assigment.
+
+# Semantics
+Solidity's syntax looks similar as Java and Javascript, however the following simple arithmetical example shows that Solidity's semantics is different from the others.
+```
+int x=0;
+int y=x + ++x;
+return y;
+```
+While in Javascript (where we should write var instead of int) the return value is 1, in Solidity it is 2.
+In Javascript the evaluation goes from the left hand side of "+" to the right hand side.  Hence the left hand side of "+" is 0 and the right hand side is 1, then finally the value of y is 1.
+In Solidity the evaluation goes in the opposite direction.  The right hand side of "+" is 1, and then the left hand side is 1, therefore the final value of y is 2.
+
+Although the above coding practice is not at all recommended, it is true that semantics is a delicate issue in formal verification.
+Studying formal semantics of Solidity is a crucial step to develop reliable formal verification methods.
+
+Let's see arithmetical examples a bit more, which are understood as a consequence of the above observation.
+```
+int x=0;
+x += x++;
+int y=0;
+y += ++y;
+```
+While in Javascript (again, use var instead of int in Javascript) the values of x and y become 0 and 1, in Solidity the values of x and y become 1 and 2, respectively.
+Although the meaning of <code>a += b</code> is <code>a = a + b</code>, that is same in the both languages, the computation order makes the results different.
+```
+int x=0;
+x -= ++x;
+```
+The result x in Solidity is 0, while it is -1 in Javascript.
+
+The tuple allows the following code in Solidity.
+```
+uint x = 0;
+uint y;
+uint z;
+(y,z) = (x, ++x);
+```
+The values of y and z are respectively 0 and 1.  The evaluation goes left to right in the case of tuple, and function arguments work in the same way.
 # To do
 <!--
 - Explaining basic logic and the satisfiability problem
