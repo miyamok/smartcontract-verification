@@ -164,6 +164,9 @@ ifStatementToFalseStatements t = falseBody ^.. key "statements" . values
 isIfStatementWithoutFalseBody :: AsValue s => s -> Bool
 isIfStatementWithoutFalseBody t = null $ t ^.. filtered (has (key "falseBody"))
 
+ifStatementToConditionExpression :: AsValue s => s -> Value
+ifStatementToConditionExpression t = head $ t ^.. key "condition"
+
 blockToNodeId :: AsValue s => s -> String
 blockToNodeId t = unpack $ head $ t ^.. key "statements" . values . key "src" . _String
 
@@ -247,7 +250,6 @@ expressionInAssignmentFormToLeftExpression stat = head $ stat ^.. key "leftHandS
 expressionInAssignmentFormToRightExpression :: AsValue s => s -> Value
 expressionInAssignmentFormToRightExpression stat = head $ stat ^.. key "rightHandSide"
 
-
 -- Duplicate elements should be removed
 expressionToFreeVariables :: AsValue s => s -> [Variable]
 expressionToFreeVariables stat
@@ -277,8 +279,25 @@ expressionToFreeVariableNamesAux t
  | nt == "Literal" = []
  | nt == "FunctionCall" = concatMap expressionToFreeVariableNamesAux $ expressionInFunctionCallFormToArguments t
  | nt == "TupleExpression" = concatMap expressionToFreeVariableNamesAux $ expressionInTupleFormToComponents t
+ | nt == "Conditional" = nub $ concatMap expressionToFreeVariableNamesAux (expressionInConditionalFormToSubExpressions t)
     where
         nt = nodeType t
+
+expressionInConditionalFormToCondition :: AsValue s => s -> Value
+expressionInConditionalFormToCondition t = head $ t ^.. key "condition"
+
+expressionInConditionalFormToTrueExpression :: AsValue s => s -> Value
+expressionInConditionalFormToTrueExpression t = head $ t ^.. key "trueExpression"
+
+expressionInConditionalFormToFalseExpression :: AsValue s => s -> Value
+expressionInConditionalFormToFalseExpression t = head $ t ^.. key "falseExpression"
+
+expressionInConditionalFormToSubExpressions :: AsValue s => s -> [Value]
+expressionInConditionalFormToSubExpressions t = [cExpr, tExpr, fExpr]
+    where
+        cExpr = expressionInConditionalFormToCondition t
+        tExpr = expressionInConditionalFormToTrueExpression t
+        fExpr = expressionInConditionalFormToFalseExpression t
 
 expressionInTupleFormToComponents :: AsValue s => s -> [Value]
 expressionInTupleFormToComponents t = t ^.. key "components" . values

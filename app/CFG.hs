@@ -93,7 +93,7 @@ lookupVarNameInEnvironment varName (StoragePointer src dst:env)
 varNameAndEnvironmentToVariable :: VarName -> Environment -> Maybe Variable
 varNameAndEnvironmentToVariable n env = listToMaybe [ v | VarDef minLevel v <- varInfos ]
     where
-        varInfos = lookupVarNameInEnvironment (n) (env)
+        varInfos = lookupVarNameInEnvironment n env
         minLevel = minimum [ i | VarDef i _ <- varInfos ]
 
 pointerVariableAndEnvironmentToPointedVariable :: Variable -> Environment -> Maybe Variable
@@ -161,8 +161,9 @@ contractToCFGEdgesList t = concat cFGEdgesList
     where
         functions = contractToFunctionDefinitions t
         env = map (variableToLocalVarDef . variableDeclarationToVariable) $ contractToStateVariableDeclarations t
-        cFGEdgesList = map (\function -> functionAndEnvironmentToCFGEdgesList function env) functions
+        cFGEdgesList = map (`functionAndEnvironmentToCFGEdgesList` env) functions
 
+-- commented out on 5 Apr.
 functionAndEnvironmentToCFGEdgesList :: AsValue s => s -> Environment -> [CFGEdges]
 functionAndEnvironmentToCFGEdgesList t env = statementsAndEnvironmentToCFGEdgesList stats env'
     where
@@ -175,8 +176,71 @@ functionAndEnvironmentToCFGEdgesList t env = statementsAndEnvironmentToCFGEdgesL
         returnVarDefs = map (VarDef 1) returnVars
         env' = paramVarDefs ++ returnVarDefs ++ incrementEnvironmentLevel env
 
+-- functionAndEnvironmentToCFGEdgesList :: AsValue s => s -> Environment -> [CFGEdges]
+-- functionAndEnvironmentToCFGEdgesList t env = statementsAndEnvironmentToCFGEdgesListAux Nothing bodyBlock env' [] []
+--     where
+--         bodyBlock = functionDefinitionToBody t
+--         paramVars = functionDefinitionToParameterVariables t
+--         returnVars = functionDefinitionToReturnVariables t
+--         paramVarDefs = map variableToLocalVarDef paramVars
+--         -- This (VarDef 1) is a temporal solution.
+--         -- To be improved (eg. Enriching Environment to carry return params separately).
+--         returnVarDefs = map (VarDef 1) returnVars
+--         env' = paramVarDefs ++ returnVarDefs ++ incrementEnvironmentLevel env
+
 statementsAndEnvironmentToCFGEdgesList :: [Value] -> Environment -> [CFGEdges]
 statementsAndEnvironmentToCFGEdgesList stats env = statementsAndEnvironmentToCFGEdgesListAux Nothing stats env [] []
+
+statementsAndEnvironmentToCFGEdgesListAux :: Maybe String -> [Value] -> Environment -> CFGEdges -> [CFGEdges] -> [CFGEdges]
+statementsAndEnvironmentToCFGEdgesListAux _ [] env [] ess = ess
+statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId [] env es ess =
+    if null lastNextNodeIds
+        then let es' = initEs ++ [(lastNode, lastNodeId, maybeToList mFollowingNodeId)]
+                in es':ess
+        else es:ess
+    where
+        initEs = init es
+        (lastNode, lastNodeId, lastNextNodeIds) = last es
+statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId (stat:stats) env es ess
+    | nt == "Block" = let es' = es ++ [(node, id, nextNodeIdList)]
+                          innerStats = blockToStatements stat
+                          env' = incrementEnvironmentLevel env
+                          ess' = ess ++ statementsAndEnvironmentToCFGEdgesListAux mNextNodeId innerStats env' [] []
+                      in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
+    | nt == "VariableDeclarationStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
+                                             in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
+    | nt == "ExpressionStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
+                                     in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
+    | nt == "EmitStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
+                              in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
+    | nt == "RevertStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
+                                in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
+    | nt == "Return" = let es' = es ++ [(node, id, ["END"])]
+                       in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
+    | nt == "IfStatement" = let trueCaseStatements = ifStatementToTrueStatements stat
+                                trueCaseBody = ifStatementToTrueBody stat
+                                falseCaseStatements = ifStatementToFalseStatements stat
+                                falseCaseBody = ifStatementToFalseBody stat
+                                trueCaseCFGEdges = statementsAndEnvironmentToCFGEdgesListAux mNextNodeId trueCaseStatements env [] []
+                                falseCaseCFGEdges = statementsAndEnvironmentToCFGEdgesListAux mNextNodeId falseCaseStatements env [] []
+                                withoutFalseBody = isIfStatementWithoutFalseBody stat
+                                es' = if withoutFalseBody
+                                      then es ++ [(node, id, src (head trueCaseStatements):nextNodeIdList)]
+                                      else es ++ [(node, id, map (src . head) [trueCaseStatements, falseCaseStatements])]
+                                ess' = if withoutFalseBody
+                                       then ess ++ trueCaseCFGEdges
+                                       else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
+                            in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
+    -- | otherwise = let es' = es ++ [(node, id, ["END"])]
+    --               in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
+    where
+        nt = nodeType stat
+        id = src stat
+        mNextNodeId = if null stats then mFollowingNodeId else Just (src $ head stats)
+        nextNodeIdList = maybeToList mNextNodeId
+        node = (stat, env)
+        varDefs = environmentToVarDefs env
+        newEnv = statementAndEnvironmentToUpdatedEnvironment stat env
 
 statementAndEnvironmentToUpdatedEnvironment :: Value -> Environment -> Environment
 statementAndEnvironmentToUpdatedEnvironment stat env
@@ -222,46 +286,6 @@ statementAndEnvironmentToUpdatedEnvironment stat env
         id = src stat
         node = (stat, env)
         varDefs = environmentToVarDefs env
-
-statementsAndEnvironmentToCFGEdgesListAux :: Maybe String -> [Value] -> Environment -> CFGEdges -> [CFGEdges] -> [CFGEdges]
-statementsAndEnvironmentToCFGEdgesListAux _ [] env es ess = es:ess
-statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId (stat:stats) env es ess
-    | nt == "Block" = let es' = es ++ [(node, id, nextNodeIdList)]
-                          innerStats = blockToStatements stat
-                          env' = incrementEnvironmentLevel env
-                          ess' = ess ++ statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId innerStats env' [] []
-                      in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
-    | nt == "VariableDeclarationStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
-                                             in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
-    | nt == "ExpressionStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
-                                     in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats newEnv es' ess
-    | nt == "EmitStatement" = let es' = es ++ [(node, id, nextNodeIdList)]
-                              in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
-    | nt == "RevertStatement" = let es' = es ++ [(node, id, [])]
-                                in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
-    | nt == "Return" = let es' = es ++ [(node, id, [])]
-                       in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
-    | nt == "IfStatement" = let trueCaseStatements = ifStatementToTrueStatements stat
-                                falseCaseStatements = ifStatementToFalseStatements stat
-                                trueCaseCFGEdges = statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId trueCaseStatements env [] []
-                                falseCaseCFGEdges = statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId falseCaseStatements env [] []
-                                withoutFalseBody = isIfStatementWithoutFalseBody stat
-                                es' = if withoutFalseBody
-                                      then es ++ [(node, id, src (head trueCaseStatements):nextNodeIdList)]
-                                      else es ++ [(node, id, map (src . head) [trueCaseStatements, falseCaseStatements])]
-                                ess' = if withoutFalseBody
-                                       then ess ++ trueCaseCFGEdges
-                                       else ess ++ trueCaseCFGEdges ++ falseCaseCFGEdges
-                            in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess'
-    -- | otherwise = let es' = es ++ [(node, id, ["END"])]
-    --               in statementsAndEnvironmentToCFGEdgesListAux mFollowingNodeId stats env es' ess
-    where
-        nt = nodeType stat
-        id = src stat
-        nextNodeIdList = if null stats then maybeToList mFollowingNodeId else [src $ head stats]
-        node = (stat, env)
-        varDefs = environmentToVarDefs env
-        newEnv = statementAndEnvironmentToUpdatedEnvironment stat env
 
 -- followingNodeIdAndStatementsToCFGEdgesListAux :: Maybe String -> [Value] -> CFGEdges -> [CFGEdges] -> [CFGEdges]
 -- followingNodeIdAndStatementsToCFGEdgesListAux _ [] es ess = es:ess

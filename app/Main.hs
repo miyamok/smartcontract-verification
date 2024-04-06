@@ -66,6 +66,7 @@ main = do args <- getArgs
                     let functionsList = map contractToFunctionDefinitions cs
                     let functionNamesList = map (map functionDefinitionToName) functionsList
                     let cfgsList = map contractToCFGEdgesList cs
+                    let simpleGraph = map (map cFGEdgesToSimpleGraph) cfgsList
                     let unreadsList = map (map cFGEdgesToUnreadVariables) cfgsList
                     let functionNameAndUnreadVarsList = zipWith zip functionNamesList unreadsList
                     let fnUnreads = map (filter (\(fn, unreads) -> not $ null unreads)) functionNameAndUnreadVarsList
