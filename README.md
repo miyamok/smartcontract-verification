@@ -123,6 +123,17 @@ The official solidity compiler <code>solc</code> offers the option <code>--ast-c
 Our verification system relies on this feature of <code>solc</code>.
 The description of the solidity AST is available as https://solidity-ast.netlify.app/ .
 
+### LValue
+
+In Solidity AST we often see information concerning LValue, that is for instance <code>isLValue</code> and <code>lValueRequested</code>.
+An expression is LValue if and only if it is a variable or something that can be assigned to.
+
+For example, assume we have an expression <code>something.property</code> in Solidity.
+In case it is an enum, the <code>isLValue</code> of <code>something</code> is falase.  On the other hand if it is a variable of struct type, the <code>isLValue</code> is true.
+
+- https://www.gnu.org/software/c-intro-and-ref/manual/html_node/Lvalues.html
+- https://docs.soliditylang.org/en/latest/types.html#compound-and-increment-decrement-operators
+
 ### Conditionals
 Solidity has two kinds of conditionals, namely, <code>if</code>-statement and the ternary expression <code>b ? t : f</code>.
 In the <code>then</code> clause, the verification process carries on assuming the condition holds, while the negation of the condition is taken in the verification of the <code>else</code> clause.
