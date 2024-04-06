@@ -133,6 +133,7 @@ In case it is an enum, the <code>isLValue</code> of <code>something</code> is fa
 
 - https://www.gnu.org/software/c-intro-and-ref/manual/html_node/Lvalues.html
 - https://docs.soliditylang.org/en/latest/types.html#compound-and-increment-decrement-operators
+- https://www.learncpp.com/cpp-tutorial/value-categories-lvalues-and-rvalues/
 
 ### Conditionals
 Solidity has two kinds of conditionals, namely, <code>if</code>-statement and the ternary expression <code>b ? t : f</code>.
