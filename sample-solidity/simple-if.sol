@@ -23,7 +23,6 @@ contract SimpleIf {
         // Here the true case of the above conditional has return inside,
         // hence we assume (Not (Not (x==10))) in the rest of analysis.
         if (x > 10 ? x % 2 == 1 : x % 3 == 0) {
-
             return 2;
         }
 
@@ -35,7 +34,7 @@ contract SimpleIf {
         if (x < 10 || x >= 10) {
             return 4;
         }
-        return 0;
+        return x;
 
     }
 }
