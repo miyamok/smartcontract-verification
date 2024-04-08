@@ -68,6 +68,8 @@ In function paymentForgetful the following variables are not read after an assig
 This suggests that there is a potential issue, as there is a meaningless assigment.
 
 # Semantics
+In this section, we describe what issues will be clarified as a resul of studying semantics of Solidity.
+
 Solidity's syntax looks similar as Java and Javascript, however the following simple arithmetical example shows that Solidity's semantics is different from the others.
 ```
 int x=0;
@@ -104,6 +106,18 @@ uint z;
 (y,z) = (x, ++x);
 ```
 The values of y and z are respectively 0 and 1.  The evaluation goes left to right in the case of tuple, and function arguments work in the same way.
+
+There is another issue concerning the memory/storage distinction.
+Assume <code>Person</code> is a sturuct already defined, and there is a state variable <code>vip</code> of type <code>Person</code>.
+```
+Person memory p = vip;
+```
+Here, <code>p</code> gets the copy of data kept by <code>vip</code>.  On the other hand, in the followng code, <code>p</code> gets a storage location of the state variable <code>vip</code>.
+```
+Person storage p = vip;
+```
+Although there can be several different formal semantics of Solidity language, one possible interpretation of the above example is that the right hand side of the assignment, <code>vip</code>, denotes something different between the two.
+In the first example, <code>vip</code> denotes the copy of the data which we can refer by <code>vip</code>, and in the second, <code>vip</code> denotes the storage location of itself.
 # To do
 <!--
 - Explaining basic logic and the satisfiability problem
