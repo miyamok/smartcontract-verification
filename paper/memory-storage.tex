@@ -1,0 +1,148 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage[T1]{fontenc}
+\usepackage{url}
+\title{Detecting Erroneous Use of \texttt{memory} Modifier in Solidity}
+\author{Kenji Miyamoto}
+\date{\today}
+\begin{document}
+\maketitle
+%%%%%\abstract{}
+\section{Introduction}
+Solidity is a programming language specialized to develop smart
+contracts.  The solodity compiler generates a byte code which is executed
+within Ethereum Virtual Machine, a cloud computer consisting of
+thousands of physical computers\footnote{7450 nodes as of
+17.03.2024. (cf. \texttt{https://ethernodes.org/})}.  A byte code is
+deployed on an Ethereum blockchain, and is usable by anybody who pays
+sufficient cost for execution in the native currency (eg.~Ether) of
+the blockchain.  The execution cost of a smart contract depends on how
+much and what kind of opcodes (i.e.~low level computational
+instructions) it involves, how much persistent data storage it uses,
+and so.  Because of this circumstance, it is crucial for smart
+contracts to carry out its tasks by means of cheaper opcodes and fewer
+amount of persistent data.  Solidity has modifiers such as
+\texttt{memory} and \texttt{storage} to specify which data area a
+declared variable of reference-type, such as arrays, strings, structs,
+and mappings, occupies, and it determines either the data is ephemeral
+or persistent.  In order to reduce the execution cost, unnecessary
+uses of persistent data should be replaced by ephemeral data, but on
+the other hand, an erronous use of ephemeral data causes an unexpected
+loss of data modification.  In this paper, we review the Solidity
+language focusing on the difference between ephemeral data area and
+persistent data area, and then are going to study a static program
+analysis technique to detect potential erroneous uses of ephemeral
+data areas.
+\section{Solidity overview}
+In this section, we give an overview on the Solidity language.
+Solidity is a statically typed language which uses ECMAScript-like syntax...
+
+Here we give an example of a Solidity code with an erroneous use of data area which we are going to detect through static analysis.
+\begin{verbatim}
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity >=0.8.2 <0.9.0;
+
+contract Example {
+
+    Person[] data;
+    uint256 counter;
+
+    struct Person {
+        String name;
+        uint256 balance;
+    }
+
+    constructor() {
+        Person memory p1 = Person("John Doe", 10);
+        data.push(p1);
+        Person memory p2 = Person("Jane Roe", 25);
+        data.push(p2);
+    }
+
+    function modify(uint256 idx, uint newBalance) public {
+        Person memory p = data[idx];
+        p.balance=newBalance;
+        counter++;
+        // p is ephemeral, and the updated balance does not persist.
+        // If counter were not modified, this function might be
+        // restricted to be view, hence a warning would come up.
+    }
+
+    function retrieve(uint256 idx) public view returns (Person) {
+        return data[idx];
+    }
+}
+\end{verbatim}
+\section{Core language of Solidity}
+This section describes a subset of Solidity's syntax\footnote{\url{https://docs.soliditylang.org/en/latest/grammar.html} for the official information on the Solidity grammar.}.
+A Solidity program file \textit{source-unit} is of the following structure.
+\begin{align*}
+  \textit{source-unit} ::= ( & (\texttt{pragma}~\textit{pragma-token}^+ ) ~|~ \textit{contract-definition})^*
+\end{align*}
+Here we use \({}^+\) for a repetition at least once, \({}^*\) for a repetition at least 0 time, \(|\) for choice, the parentheses for grouping, the italic face for non-terminating symbols, and the typewriter face for terminating symbols.
+A \textit{pragma-token} is a token which can contain any kind of symbol except a semicolon.
+In this paper, we assume \textit{pragma-token} is a version specification of the Solidity source code.  We omitted the license declaration, which you
+often find at the first line starting with \texttt{// SPDX-License-Identifier:} in a Solidity file.
+A \textit{contract-definition} defines a smart contract, and its is of the following structure.
+\begin{align*}
+ \textit{contract-definition} ~::=~ & \texttt{abstract}^{?}~\texttt{contract} ~\textit{identifier} \\
+  & \quad (\texttt{is}~\textit{inheritance-specifier}~(\texttt{,}~\textit{inheritance-specifier})^{*})^? \\
+  & \quad \mbox{\tt\{} \textit{contract-body-element}^* \mbox{\tt\}}
+\end{align*}
+Here we use \({}^?\) for an option, namely, a symbol with it either occurs or not at all.  Note that the curly braces in the typewriter face are terminating token and have occurrences in the actual source code.
+\textit{identifier} is for the name of the contract, \textit{inheritance-specifier} is for the identifier of a super contract to inherit from.
+\textit{contract-body-element} is of the following structure.
+\begin{align*}
+  & \textit{contract-body-element} ~::=~ \\
+  & ~~  \textit{constructor-definition} ~|~ 
+\textit{function-definition} ~|~ \textit{modifier-definition} ~|~ \\
+& ~~  \textit{fallback-function-definition} ~|~ 
+ \textit{receive-function-definition} ~|~
+\textit{struct-definition} ~|~ \\
+& ~~  \textit{enum-definition} ~|~ 
+\textit{user-defined-value-type-definition} ~|~ \\
+& ~~ \textit{state-variable-declaration} ~|~
+\textit{event-definition} ~|~ 
+\textit{error-definition} ~|~
+\textit{using-directive}
+\end{align*}
+\textit{function-definition} is to define a function, and is of the following structure.
+\begin{align*}
+  & \textit{function-definition} ~::=~ \\
+  & \quad \texttt{function}~(\textit{identifier} ~|~
+  \texttt{fallback} ~|~ \texttt{receive} ) ~\texttt{(} \textit{parameter-list}\texttt{)}\\
+  & \qquad (\textit{visibility} ~|~ \textit{state-mutability} ~|~ \textit{modifier-invocartion} ~|~ \texttt{virtual} ~|~ \\
+  & \qquad \qquad \qquad \textit{override-specifier})^* \\
+  & \qquad (\texttt{returns}~\texttt{(} \textit{parameter-list} \texttt{)})^? \\
+  & \qquad (\texttt{;} ~|~ \textit{block})
+  %%\mbox{\tt\{} \textit{contract-body-element}^* \mbox{\tt\}}
+\end{align*}
+%% which is a line starting with the text  followed by an identifier
+%% such as \texttt{GPL-3.0}, \texttt{MIT}, etc.
+%% This line is a comment, as you find \texttt{//}, but the Solidity compiler issues a warning message if this license declaration is not properly given.
+%% \texttt{Pragma} is compiler directives.
+{\it To do: further description on the syntax.}
+
+\textit{block} and \textit{statement} are given as follows.
+\begin{align*}
+\textit{block} ~::=~ & \mbox{\tt\{} \textit{statement}^* \mbox{\tt\}} \\
+\textit{statement}  ~::=~ & \textit{block} ~|~
+\textit{variable-declaration-statement} ~|~
+\textit{expression-statement} ~|~ \\
+& \textit{if-statement} ~|~
+\textit{for-statement} ~|~
+\textit{while-statement} ~|~ \\
+& \textit{do-while-statement} ~|~
+\textit{continue-statement} ~|~
+\textit{break-statement} ~|~ \\
+& \textit{try-statement} ~|~
+\textit{return-statement} ~|~
+\textit{emit-statement} ~|~\\
+& \textit{revert-statement} ~|~
+\textit{assembly-statement}
+\end{align*}
+As common in modern languages, a block is not just a container of statements but it also creates a variable scope.
+\section{Implementation}
+
+\end{document}
