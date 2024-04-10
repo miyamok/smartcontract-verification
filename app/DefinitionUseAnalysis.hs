@@ -7,8 +7,6 @@ import CFG
 import Data.Maybe
 import Data.List
 import Debug.Trace
-import System.Process (CreateProcess(env))
-
 
 type LVTable = [(String, [Variable], [Variable])] -- A row consists of the src location, LVentry, and LVexit.
 type DUTable = [(String, [String], [Variable], [Variable])] -- nodeId, nextNodeIds, updated variables, read variables, 

@@ -2,77 +2,132 @@
 module SolidityFeature where
 
 import Control.Lens
+import Data.Aeson
 import Data.Aeson.Lens
---import Data.ByteString ()
 import Data.Aeson.Key ( fromString )
 import Data.Text ( Text, pack, unpack )
 import Data.List
-import Data.Aeson
-import Data.Graph
 import Data.Foldable (for_)
 import Data.Maybe (maybeToList, listToMaybe)
---import qualified Data.ByteString as Text
 import Debug.Trace
 
 type CFGMatrix = (Value, Int, [Int])
 type VarName = String
 type Variable = (VarName, String, String) -- name, type, and src (pointing the declaration statement, but no nameLocation!)
+
 type UnaryOperator = (Bool, String) -- isPrefix and operator in string
 
-absolutePath :: AsValue s => s -> Maybe Text
-absolutePath t = t ^? key "absolutePath" . _String
+-- Functions processing a Solidity file
 
-contracts :: AsValue s => s -> [Value]
-contracts t = t ^.. key "nodes" . values . filtered (has (key "nodeType" . _String . only "ContractDefinition"))
+fileToAbsolutePath :: AsValue s => s -> Maybe String
+fileToAbsolutePath t = fmap unpack $ t ^? key "absolutePath" . _String
+
+fileToContracts :: AsValue s => s -> [Value]
+fileToContracts t = t ^.. key "nodes" . values . filtered (has (key "nodeType" . _String . only "ContractDefinition"))
+
+-- Functions processing a contract
 
 contractToContractName :: AsValue s => s -> String
 contractToContractName t = unpack $ head $ t ^.. key "name" . _String
 
-contractNameToVariableDeclarations :: AsValue s => s -> String -> [Value]
-contractNameToVariableDeclarations t contractName = t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "VariableDeclaration"))
-
 contractToFunctionDefinitions :: AsValue s => s -> [Value]
 contractToFunctionDefinitions t = t ^.. key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition"))
-
-variableDeclarations :: AsValue s => s -> [Value]
-variableDeclarations t = t ^.. key "nodes" . values . key "nodes" . values . filtered (has (key "nodeType"._String.only "VariableDeclaration"))
-
-functionDefinitions :: AsValue s => s -> [Value]
-functionDefinitions t = t ^.. key "nodes" . values . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition"))
-
-contractNameToFunctionDefinitions :: AsValue s => s -> String -> [Value]
-contractNameToFunctionDefinitions t contractName = t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition"))
-
-contractNameToFunctionNames :: AsValue s => s -> String -> [Text]
-contractNameToFunctionNames t contractName = t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . key "name" . _String
-
-contractNameAndFunctionNameToArgumentTypes :: AsValue s => s -> String -> String -> [Text]
-contractNameAndFunctionNameToArgumentTypes t contractName functionName =
-    t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "parameters" . key "parameters" . values.key "typeDescriptions" . key "typeString" . _String
-
-contractNameAndFunctionNameToArgumentVariableNames :: AsValue s => s -> String -> String -> [Text]
-contractNameAndFunctionNameToArgumentVariableNames t contractName functionName =
-    t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "parameters" . key "parameters" . values.key "name" . _String
-
-contractNameAndFunctionNameToReturnTypes :: AsValue s => s -> String -> String -> [Text]
-contractNameAndFunctionNameToReturnTypes t contractName functionName =
-    t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "returnParameters" . filtered (has (key "nodeType"._String.only (Data.Text.pack "ParameterList"))) . key (fromString "parameters") . values . key (fromString "typeDescriptions") . key (fromString "typeString") . _String
-
-contractNameAndFunctionNameToReturnVariableNames :: AsValue s => s -> String -> String -> [Text]
-contractNameAndFunctionNameToReturnVariableNames t contractName functionName =
-    t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "returnParameters" . filtered (has (key "nodeType"._String.only (Data.Text.pack "ParameterList"))) . key (fromString "parameters") . values . key "name" . _String
-
-functionDefinitionToName :: AsValue s => s -> String
-functionDefinitionToName t = unpack $ head $ t ^.. key "name" . _String
 
 contractToStateVariableDeclarations :: AsValue s => s -> [Value]
 contractToStateVariableDeclarations = contractToDefinitionsOrDeclarations "VariableDeclaration"
 
+contractToDefinitionsOrDeclarations :: AsValue s => Text -> s -> [Value]
+contractToDefinitionsOrDeclarations s t = t ^.. key "nodes" . values . filtered (has (key "nodeType"._String.only s))
+
+contractToEventDefinitions :: AsValue s => s -> [Value]
+contractToEventDefinitions = contractToDefinitionsOrDeclarations "EventDefinition"
+
+contractToStructDefinitions :: AsValue s => s -> [Value]
+contractToStructDefinitions = contractToDefinitionsOrDeclarations "StructDefinition"
+
+contractToEnumDefinitions :: AsValue s => s -> [Value]
+contractToEnumDefinitions = contractToDefinitionsOrDeclarations "EnumDefinition"
+
+contractToErrorDefinitions :: AsValue s => s -> [Value]
+contractToErrorDefinitions = contractToDefinitionsOrDeclarations "ErrorDefinition"
+
+-- Functions processing a function definition
+
+functionDefinitionToName :: AsValue s => s -> String
+functionDefinitionToName t = unpack $ head $ t ^.. key "name" . _String
+
+functionDefinitionToBodyStatements :: AsValue s => s -> [Value]
+functionDefinitionToBodyStatements t = t ^.. key "body" . key "statements" . values
+
+functionDefinitionToBody :: AsValue s => s -> [Value]
+functionDefinitionToBody t = t ^.. key "body"
+
+functionDefinitionToParameterVariables :: AsValue s => s -> [Variable]
+functionDefinitionToParameterVariables stat = map (\v ->
+    let name = unpack $ head $ v ^.. key "name" . _String
+        typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
+        src = unpack $ head $ v ^.. key "src" . _String
+     in (name, typeDescription, src))
+    parameters
+    where
+        parameters = stat ^.. key "parameters" . key "parameters" . values
+
+functionDefinitionToReturnVariables :: AsValue s => s -> [Variable]
+functionDefinitionToReturnVariables stat = declaredVariablesWithName
+    where
+        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
+        declaredVariables = map (\v ->
+            let name = unpack $ head $ v ^.. key "name" . _String
+                typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
+                src = unpack $ head $ v ^.. key "src" . _String
+             in (name, typeDescription, src))
+            parameters
+        declaredVariablesWithName = filter (\(n, _, _) -> n /= "") declaredVariables
+
+functionDefinitionToReturnVariableTypes :: AsValue s => s -> [String]
+functionDefinitionToReturnVariableTypes stat = declaredVariables
+    where
+        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
+        declaredVariables = map (\v ->
+            unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String)
+            parameters
+
+-- Functions processing a definition/declaration
+-- struct-definition, event-definition, enum-definition, constant-variable-declaration, error-definition
+
+definitionOrDeclarationToName :: AsValue s => s -> String
+definitionOrDeclarationToName t = unpack . head $ t ^.. key "name" . _String
+
+definitionOrDeclarationToType :: AsValue s => s -> String
+definitionOrDeclarationToType t = unpack . head $ t ^..  key "typeDescriptions" . key "typeString" . _String
+
+-- Functions processing an event definition
+
+eventDefinitionToName :: AsValue s => s -> String
+eventDefinitionToName = definitionOrDeclarationToName
+
+-- Functions processing a struct definition
+
+structDefinitionToName :: AsValue s => s -> String
+structDefinitionToName = definitionOrDeclarationToName
+
+-- Functions processing an enum definition
+
+enumDefinitionToName :: AsValue s => s -> String
+enumDefinitionToName = definitionOrDeclarationToName
+
+-- Functions processing an error definition
+
+errorDefinitionToName :: AsValue s => s -> String
+errorDefinitionToName = definitionOrDeclarationToName
+
+-- Functions processing a variable declaration
+
 variableDeclarationToName :: AsValue s => s -> String
-variableDeclarationToName = unpack . definitionOrDeclarationToName
+variableDeclarationToName = definitionOrDeclarationToName
 
 variableDeclarationToType :: AsValue s => s -> String
-variableDeclarationToType = unpack . definitionOrDeclarationToType
+variableDeclarationToType = definitionOrDeclarationToType
 
 variableDeclarationToVariable :: AsValue s => s -> Variable
 variableDeclarationToVariable v = (n, t, s)
@@ -89,45 +144,6 @@ variableDeclarationToStorageLocation t = unpack $ head $ t ^.. key "storageLocat
 variableDeclarationStatementToVariableDeclaration :: AsValue s => s -> Value
 variableDeclarationStatementToVariableDeclaration stat = head $ stat ^.. key "declarations" . values
 
--- struct-definition, event-definition, enum-definition, constant-variable-declaration, error-definition
-
-contractToDefinitionsOrDeclarations :: AsValue s => Text -> s -> [Value]
-contractToDefinitionsOrDeclarations s t = t ^.. key "nodes" . values . filtered (has (key "nodeType"._String.only s))
-
-definitionOrDeclarationToName :: AsValue s => s -> Text
-definitionOrDeclarationToName t = head $ t ^.. key "name" . _String
-
-definitionOrDeclarationToType :: AsValue s => s -> Text
-definitionOrDeclarationToType t = head $ t ^..  key "typeDescriptions" . key "typeString" . _String
-
-contractToEventDefinitions :: AsValue s => s -> [Value]
-contractToEventDefinitions = contractToDefinitionsOrDeclarations "EventDefinition"
-
-eventDefinitionToName :: AsValue s => s -> Text
-eventDefinitionToName = definitionOrDeclarationToName
-
-contractToStructDefinitions :: AsValue s => s -> [Value]
-contractToStructDefinitions = contractToDefinitionsOrDeclarations "StructDefinition"
-
-structDefinitionToName :: AsValue s => s -> Text
-structDefinitionToName = definitionOrDeclarationToName
-
-contractToEnumDefinitions :: AsValue s => s -> [Value]
-contractToEnumDefinitions = contractToDefinitionsOrDeclarations "EnumDefinition"
-
-enumDefinitionToName :: AsValue s => s -> Text
-enumDefinitionToName = definitionOrDeclarationToName
-
-contractToErrorDefinitions :: AsValue s => s -> [Value]
-contractToErrorDefinitions = contractToDefinitionsOrDeclarations "ErrorDefinition"
-
-errorDefinitionToName :: AsValue s => s -> Text
-errorDefinitionToName = definitionOrDeclarationToName
-
-contractNameAndFunctionNameToBody :: AsValue s => s -> String -> String -> [Value]
-contractNameAndFunctionNameToBody t contractName functionName =
-    t ^.. key "nodes" . values . filtered (\x -> has (key "nodeType" . _String . only "ContractDefinition") x && has (key "name" . _String . only (Data.Text.pack contractName)) x) . key "nodes" . values . filtered (has (key "nodeType"._String.only "FunctionDefinition")) . filtered (has (key "name"._String.only (Data.Text.pack functionName))) . key "body"
-
 blockToStatements :: AsValue s => s -> [Value]
 blockToStatements t = t ^.. key "statements" . values
 
@@ -141,9 +157,6 @@ nodeType t = unpack $ head $ t ^.. key "nodeType" . _String
 
 src :: AsValue s => s -> String
 src t = unpack $ head $ t ^.. key "src" . _String
-
-functionToStatements :: AsValue s => s -> [Value]
-functionToStatements t = t ^.. key "body" . key "statements" . values
 
 ifStatementToTrueBody :: AsValue s => s -> Value
 ifStatementToTrueBody t = head $ t ^.. key "trueBody"
@@ -199,7 +212,7 @@ indexAndStatementsToCFGMatrices i (stat:stats) = cFGMatrices ++ restCFGMatrices
         restCFGMatrices = indexAndStatementsToCFGMatrices j stats
 
 printProfile :: AsValue s => s -> IO ()
-printProfile t = do for_ (contracts t) printContractProfile
+printProfile t = do for_ (fileToContracts t) printContractProfile
 
 printContractProfile :: AsValue s => s -> IO ()
 printContractProfile t = do putStrLn $ "Contract name: " ++ cName
@@ -217,6 +230,9 @@ printContractProfile t = do putStrLn $ "Contract name: " ++ cName
         es = map enumDefinitionToName $ contractToEnumDefinitions t
         errs = map errorDefinitionToName $ contractToErrorDefinitions t
         evs = map eventDefinitionToName $ contractToEventDefinitions t
+
+showVariable :: Variable -> String
+showVariable (n, t, s) = "(" ++ intercalate "," [n, t, s] ++ ")"
 
 showContractProfile :: AsValue s => s -> String
 showContractProfile t =
@@ -341,7 +357,10 @@ expressionInIdentifierFormToVariable stat =
      in (name, typeDescription, src)
 
 expressionInIdentifierFormToVariableName :: AsValue s => s -> VarName
-expressionInIdentifierFormToVariableName stat = unpack $ head $ stat ^.. key "name" . _String
+expressionInIdentifierFormToVariableName t = unpack $ head $ t ^.. key "name" . _String
+
+expressionInLiteralFormToValueString :: AsValue s => s -> String
+expressionInLiteralFormToValueString t = unpack $ head $ t ^.. key "value" . _String
 
 expressionInBinaryOperationFormToExpressions :: AsValue s => s -> [Value]
 expressionInBinaryOperationFormToExpressions stat = lhs ++ rhs
@@ -357,42 +376,6 @@ expressionInUnaryOperationFormToOperator stat = (isPrefix, op)
     where
         isPrefix = head $ stat ^.. key "prefix" . _Bool
         op = unpack $ head $ stat ^.. key "operator" . _String
-
-functionDefinitionToBodyStatements :: AsValue s => s -> [Value]
-functionDefinitionToBodyStatements t = t ^.. key "body" . key "statements" . values
-
-functionDefinitionToBody :: AsValue s => s -> [Value]
-functionDefinitionToBody t = t ^.. key "body"
-
-functionDefinitionToParameterVariables :: AsValue s => s -> [Variable]
-functionDefinitionToParameterVariables stat = map (\v ->
-    let name = unpack $ head $ v ^.. key "name" . _String
-        typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
-        src = unpack $ head $ v ^.. key "src" . _String
-     in (name, typeDescription, src))
-    parameters
-    where
-        parameters = stat ^.. key "parameters" . key "parameters" . values
-
-functionDefinitionToReturnVariables :: AsValue s => s -> [Variable]
-functionDefinitionToReturnVariables stat = declaredVariablesWithName
-    where
-        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
-        declaredVariables = map (\v ->
-            let name = unpack $ head $ v ^.. key "name" . _String
-                typeDescription = unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String
-                src = unpack $ head $ v ^.. key "src" . _String
-             in (name, typeDescription, src))
-            parameters
-        declaredVariablesWithName = filter (\(n, _, _) -> n /= "") declaredVariables
-
-functionDefinitionToReturnVariableTypes :: AsValue s => s -> [String]
-functionDefinitionToReturnVariableTypes stat = declaredVariables
-    where
-        parameters = stat ^.. key "returnParameters" . key "parameters" . values  . filtered (has (key "nodeType" . _String . only "VariableDeclaration"))
-        declaredVariables = map (\v ->
-            unpack $ head $ v ^.. key "typeDescriptions" . key "typeString" . _String)
-            parameters
 
 -- NOTE: Variable declaration should be distinguished from variable use
 

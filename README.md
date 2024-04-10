@@ -68,7 +68,7 @@ In function paymentForgetful the following variables are not read after an assig
 This suggests that there is a potential issue, as there is a meaningless assigment.
 
 # Semantics
-In this section, we describe what issues will be clarified as a resul of studying semantics of Solidity.
+In this section, we describe what issues will be clarified as a result of studying semantics of Solidity.
 
 Solidity's syntax looks similar as Java and Javascript, however the following simple arithmetical example shows that Solidity's semantics is different from the others.
 ```

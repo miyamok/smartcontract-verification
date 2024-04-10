@@ -61,8 +61,8 @@ main = do args <- getArgs
             [] -> putStrLn "Error: No .sol file name given"
             _ -> do let filename = head files
                     t <- reader filename
-                    putStrLn $ "File to analyze: " ++ unpack (fromJust $ absolutePath t) ++ "\n"
-                    let cs = contracts t
+                    putStrLn $ "File to analyze: " ++ fromJust (fileToAbsolutePath t) ++ "\n"
+                    let cs = fileToContracts t
                     let functionsList = map contractToFunctionDefinitions cs
                     let functionNamesList = map (map functionDefinitionToName) functionsList
                     let cfgsList = map contractToCFGEdgesList cs
