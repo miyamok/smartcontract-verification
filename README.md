@@ -136,7 +136,7 @@ The following contract, a coin jar, is vulnerable because of the way <code>withd
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.12 <0.9.0;
 
-contract VulnerableJar {
+contract Jar {
 
     mapping(address=>uint) public balance;
 
@@ -151,25 +151,25 @@ contract VulnerableJar {
     function withdraw() public {
         require(balance[msg.sender] != 0, "zero balance");
         (bool s,) = msg.sender.call{ value: balance[msg.sender] }("");
-        require(s, "In VulnerableJar.withdrow(), call() failed.");
+        require(s, "In Jar.withdrow(), call() failed.");
         balance[msg.sender] = 0;
     }
 }
 ```
-The expected use case is that anybody can make a deposit by calling <code>deposit()</code> with some value, and then can withdraw the deposit by calling <code>withdraw()</code>.
-The problem arises when one uses the following contract <code>Cracker</code> to attack <code>VulnerableJar</code>, assuming the above Solidity code is available as <code>./Jar.sol</col>.
+The expected use case is that anybody can make a deposit by calling <code>deposit()</code> with some value, and anytime in the future, the one can withdraw the deposit by calling <code>withdraw()</code>.
+The problem arises when one uses the following contract <code>Attacker</code> to attack <code>Jar</code>, assuming the above Solidity code is available as <code>./Jar.sol</code>.
 ```
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.12 <0.9.0;
 import "./Jar.sol";
 
-contract Cracker {
+contract Attacker {
 
-    VulnerableJar public jar;
+    Jar public jar;
     address public owner;
 
     constructor(address _jar) payable {
-        jar = VulnerableJar(_jar);
+        jar = Jar(_jar);
         owner = msg.sender;
     }
 
@@ -194,24 +194,23 @@ contract Cracker {
     }
 }
 ```
-By calling <code>getMoney()</code>, it deposits 1 ETH and then immediately starts withdrawing it.
-The execution comes to <code>withdraw</code>, and its <code>call</code> function invokes <code>fallback()</code>; although the parameter is the null string <code>""</code>, the attacker's contract satisfies the condition to get the fallback function executed by the victim contract.
-The fallback function makes another call to <code>withdraw</code> which is the so-called reentrancy.
-As the condition <code>balance[msg.sender] != 0</code> is satisfied, the jar contract again sends 1 ETH to the attacker, and it repeats until the asset balance of the victim goes less than 1 ETH.
-At the end, the attacker calls <code>destroy()</code>, then the contract is deleted and its asset is transferred to the contract owner, namely, the attacker.
+The story goes in the following way.
+The process starts from attacker's calling <code>deposit()</code> of <code>Attacker</code>; the balance of the jar contract now keeps that the contract <code>Attacker</code> has 1 ETH deposit.  Then the attacker calls <code>attack()</code>.  The execution goes to <code>withdraw()</code> of <code>Jar</code>, where it first checks that the message sender, i.e. the contract <code>Attacker</code> has deposited some ETH, and next it makes a payout by means of <code>call()</code>; as commonly done, it transfers money by sending the empty call data, i.e. <code>""</code>, to the depositor.
+When the <code>Attacker</code> contract receives money, its <code>receive()</code> is executed.  It checks that the jar contract has at least 1 ETH, and if so, it tries to further withdraw 1 ETH by calling <code>withdraw()</code> of the <code>Jar</code> contract, which causes the so-called <i>reentrancy</i>.
+As the condition <code>balance[msg.sender] != 0</code> is still satisfied, the jar contract again sends 1 ETH to the attacker, and it repeats until the ETH asset balance of the victim goes less than 1 ETH.
 
 ### Problem analysis
 
-VulnerableJar sends money to an arbitrary address, that means, anybody who makes a deposit.  Here, there is a possibility of its sending money to an unknown smart contract rather than an EOA (externally owned account).  The prerequisite for successful withdrawal is that the balance <code>balance[msg.sender]</code> is positive.  As the balance is not changed before the actual money transfer, the prerequisite is samely satisfied in case of a reentrancy, hence it repeatedly sends money.  After the attacker stops the process, the the whole transaction will successfully be over without causing a revert; it just assigns <code>0</code> to <code>balance[msg.sender]</code> after all transfers were done.
+Jar sends money to an arbitrary address, that means, anybody who makes a deposit.  Here, there is a possibility of its sending money to an unknown smart contract rather than an EOA (externally owned account).  The prerequisite for successful withdrawal is that the balance <code>balance[msg.sender]</code> is positive.  As the balance is not changed before the actual money transfer, the prerequisite is samely satisfied in case of a reentrancy, hence it repeatedly sends money.  After the attacker stops the process, the the whole transaction will successfully be over without causing a revert; it just assigns <code>0</code> to <code>balance[msg.sender]</code> after all transfers were done.
 
 Based on the above observation, our static program analyzer should issue a warning on a potential vulnerability due to the reentrancy attack, when there is a function which makes a money transfer such as:
 
 1. Preconditions of the money transfer may be satisfied in a recursive call.
-2. After carrying out the money transfer, the transaction may successfully complete.
+2. After carrying out the repeated money transfer, the transaction may successfully complete.
 
-Note that a use of mutex makes the above 1. unsatisfied, and that Solidity's change (version 0.8 and above) to cause a revert in case of underflow makes 2. unsatisfied.
+<!-- Note that a use of mutex makes the above 1. unsatisfied, and that Solidity's change (version 0.8 and above) to cause a revert in case of underflow makes 2. unsatisfied. -->
 
-In fact, a commonly suggested cure for the vulnerability is to make use of mutex to prohibit the reentrancy.  Changing the balance before invoking <code>call</code> is also a solution.  On the other hand, if the business logic were to subtract the amount of the transferred money, it could cause a revert due to the underflow, and as a result, all unexpected sendings could be cancelled.
+A commonly suggested cure for the vulnerability is to make use of mutex to prohibit the reentrancy.  Changing the balance before invoking <code>call</code> is also a solution.  On the other hand, if the business logic were to subtract the amount of the transferred money, it could cause a revert due to the underflow, and as a result, all unexpected sendings could be cancelled.
 
 <!-- and a change of state variables before money transfer  -->
 ### Implementation
