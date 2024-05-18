@@ -420,6 +420,8 @@ In ModelChecker::analyze (https://github.com/ethereum/solidity/blob/develop/libs
 
 ... continues reading CHC.cpp and BMC.cpp where actual models are built from a source AST.
 
+There are interfaces to external solvers such as Z3Interface (https://github.com/ethereum/solidity/blob/develop/libsmtutil/Z3Interface.cpp), where m_solver of the class z3::solver (https://github.com/Z3Prover/z3/blob/master/src/api/c%2B%2B/z3%2B%2B.h) plays a crucial role.
+
 ### hardhat
 The following setup procedure is successsful
 ```
