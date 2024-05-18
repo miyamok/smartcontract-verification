@@ -398,8 +398,27 @@ solc has its own SMTChecker feature for compile time verification.
 ```
 % solc test.sol --model-checker-targets all --model-checker-timeout 1000 --model-checker-solvers z3  --model-checker-engine chc
 ```
-In order to enable this feature, one use Linux for dynamic library loading (for z3 etc) or otherwise one has to re-compile the solc compiler with static library linking.
+In order to enable this feature particularly by z3, one use Linux for dynamic library loading (libz3.so) or otherwise one has to re-compile the solc compiler with static library linking.
 Cf. https://github.com/ethereum/solidity/issues/14014
+
+#### Source code reading
+
+solc internally build logical models for formal verification, namely, inputs to SMT solvers and model checkers.
+Generated abstract models are not easy to access for solc users; a core member of solc project says that it is possible but tricky.
+- https://github.com/ethereum/solidity/issues/14293
+
+Also, the following stackexchange question got no answer.
+- https://ethereum.stackexchange.com/questions/143026/how-to-get-the-abstract-model-in-smtlib2-format-or-z3-expressions-from-solidity
+
+Instead of waiting for solc's future version, alternatively one can modify the source code to output generated models while the compilation process.
+The matter is found at solidity/libsolidity/interface/CompilerStack.cpp (https://github.com/ethereum/solidity/blob/develop/libsolidity/interface/CompilerStack.cpp).
+
+From the main(), the entry point to this class CompilerStack is compile(), which calls another method parseAndAnalyse().
+In this parseAndAnalyse(), after completing parsing, another method analyze() is called, where depending on whether the solc is experimental or not, a corresponding analyzeExperimental() or analyzeLegacy() is called (cf. line 502).
+In case of analyzeLegacy(), the ModelChecker.analyze(ast) does the job (line 645).
+In ModelChecker::analyze (https://github.com/ethereum/solidity/blob/develop/libsolidity/formal/ModelChecker.cpp#L95), depending on which external engines are available, it does analysis using chc and bmc (CHC.analyze() & BMC.analyze()).
+
+... continues reading CHC.cpp and BMC.cpp where actual models are built from a source AST.
 
 ### hardhat
 The following setup procedure is successsful
