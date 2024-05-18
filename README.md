@@ -422,6 +422,14 @@ In ModelChecker::analyze (https://github.com/ethereum/solidity/blob/develop/libs
 
 There are interfaces to external solvers such as Z3Interface (https://github.com/ethereum/solidity/blob/develop/libsmtutil/Z3Interface.cpp), where m_solver of the class z3::solver (https://github.com/Z3Prover/z3/blob/master/src/api/c%2B%2B/z3%2B%2B.h) plays a crucial role.
 
+...
+
+It seems --print-smt flag is available in the ethereum develop branch.  Will try it.
+
+https://github.com/ethereum/solidity/pull/14307
+
+In the release version, the option was not recognized.
+
 ### hardhat
 The following setup procedure is successsful
 ```
