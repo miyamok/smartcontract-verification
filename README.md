@@ -434,8 +434,8 @@ In the release version, the option was not recognized.
 The following setup procedure is successsful
 ```
 % mkdir myProject && cd myProject
-% npm install --save-dev hardhat
-% npm install @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
+% npm install --save-dev --legacy-peer-deps hardhat
+% npm install --legacy-peer-deps @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
 % npm init -y
 % npx hardhat
 ```
