@@ -401,34 +401,10 @@ solc has its own SMTChecker feature for compile time verification.
 In order to enable this feature particularly by z3, one use Linux for dynamic library loading (libz3.so) or otherwise one has to re-compile the solc compiler with static library linking.
 Cf. https://github.com/ethereum/solidity/issues/14014
 
-#### Source code reading
-
-solc internally build logical models for formal verification, namely, inputs to SMT solvers and model checkers.
-Generated abstract models are not easy to access for solc users; a core member of solc project says that it is possible but tricky.
-- https://github.com/ethereum/solidity/issues/14293
-
-Also, the following stackexchange question got no answer.
-- https://ethereum.stackexchange.com/questions/143026/how-to-get-the-abstract-model-in-smtlib2-format-or-z3-expressions-from-solidity
-
-Instead of waiting for solc's future version, alternatively one can modify the source code to output generated models while the compilation process.
-The matter is found at solidity/libsolidity/interface/CompilerStack.cpp (https://github.com/ethereum/solidity/blob/develop/libsolidity/interface/CompilerStack.cpp).
-
-From the main(), the entry point to this class CompilerStack is compile(), which calls another method parseAndAnalyse().
-In this parseAndAnalyse(), after completing parsing, another method analyze() is called, where depending on whether the solc is experimental or not, a corresponding analyzeExperimental() or analyzeLegacy() is called (cf. line 502).
-In case of analyzeLegacy(), the ModelChecker.analyze(ast) does the job (line 645).
-In ModelChecker::analyze (https://github.com/ethereum/solidity/blob/develop/libsolidity/formal/ModelChecker.cpp#L95), depending on which external engines are available, it does analysis using chc and bmc (CHC.analyze() & BMC.analyze()).
-
-... continues reading CHC.cpp and BMC.cpp where actual models are built from a source AST.
-
-There are interfaces to external solvers such as Z3Interface (https://github.com/ethereum/solidity/blob/develop/libsmtutil/Z3Interface.cpp), where m_solver of the class z3::solver (https://github.com/Z3Prover/z3/blob/master/src/api/c%2B%2B/z3%2B%2B.h) plays a crucial role.
-
-...
-
-It seems --print-smt flag is available in the ethereum develop branch.  Will try it.
-
-https://github.com/ethereum/solidity/pull/14307
-
-In the release version, the option was not recognized.
+The option --model-checker-print-query is used to show the smtlib2 model of the contract, eg. by
+```
+solc overflow.sol --model-checker-solvers smtlib2 --model-checker-targets overflow --model-checker-print-query
+```
 
 ### hardhat
 The following setup procedure is successsful
