@@ -1,7 +1,7 @@
-# Smartcontract Verification
-The objective of this project is to develop software to practice formal verification of smart contracts.
+# Solidity Verification
+The objective of this project is to develop software to practice formal verification of Solidity smart contracts.
 Due to the immutability of blockchain, the correctness of smart contract code is a crucial issue to secure crypto assets, because a flaw of a source code makes the smart contract vulnerable. 
- It may cause a serious financial loss which in general cannot be recoverd, once it has happened.
+It may cause a serious financial loss which in general cannot be recoverd, once it has happened.
 Formal verification allows us to check the smart contract code before its deployment.  As a result, if the implementation is secure it mathematically proves the correctness of the smart contract, otherwise it points out what (potential) problems are there.
 
 The final goal, the correctness of smartcontract, consists of pieces of correctness conditions, which for example includes:
@@ -398,15 +398,20 @@ solc has its own SMTChecker feature for compile time verification.
 ```
 % solc test.sol --model-checker-targets all --model-checker-timeout 1000 --model-checker-solvers z3  --model-checker-engine chc
 ```
-In order to enable this feature, one use Linux for dynamic library loading (for z3 etc) or otherwise one has to re-compile the solc compiler with static library linking.
+In order to enable this feature particularly by z3, one use Linux for dynamic library loading (libz3.so) or otherwise one has to re-compile the solc compiler with static library linking.
 Cf. https://github.com/ethereum/solidity/issues/14014
+
+The option --model-checker-print-query is used to show the smtlib2 model of the contract, eg. by
+```
+solc overflow.sol --model-checker-solvers smtlib2 --model-checker-targets overflow --model-checker-print-query
+```
 
 ### hardhat
 The following setup procedure is successsful
 ```
 % mkdir myProject && cd myProject
-% npm install --save-dev hardhat
-% npm install @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
+% npm install --save-dev --legacy-peer-deps hardhat
+% npm install --legacy-peer-deps @nomiclabs/hardhat-waffle ethereum-waffle chai @nomiclabs/hardhat-ethers ethers@5.7.2 dotenv
 % npm init -y
 % npx hardhat
 ```
