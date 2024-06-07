@@ -177,10 +177,6 @@
 
 ;; Safety property
 
-;; (assert (forall ((b M) (lock Bool) (tb BUINT))
-;; 		(not (=> (Jar b lock tb)
-;; 			 (not (= lock false))))))
-
 ;; (assert
 ;;   (forall ((b M) (lock Bool) (tb BUINT) (s A) (v BUINT)
 ;;  	   (b^ M) (lock^ Bool) (tb^ BUINT) (r^ Int))
@@ -204,6 +200,25 @@
 		    (not (and (= b^ b_^)
 			      (= lock^ lock_^)
 			      (= tb^ tb_^)))))))
+
+;;Using invariance (z3 says unknown)
+;; (define-fun-rec sumaux ((xs M) (lb BUINT) (ub BUINT)) Int
+;;    (ite (bvult lb ub)
+;;         0
+;;         (+ ((_ bv2int 256) (select xs lb))
+;;            (sumaux xs (bvadd lb ((_ int2bv 256) 1)) ub))))
+
+;; (define-fun sum ((xs M)) Int
+;; 	    (sumaux xs buint0 (bvsub buint0 ((_ int2bv 256) 1))))
+
+;; (assert
+;;  (forall ((b M) (lock Bool) (tb BUINT) (s A) (v BUINT)
+;;  	  (b^ M) (lock^ Bool) (tb^ BUINT) (r^ Int))
+;;   	  (not (and (Jar b lock tb)
+;; 		    (T b lock tb s v b^ lock^ tb^ r^)
+;; 		    (= r^ 0)
+;; 		    (not (= (- (sum b) ((_ bv2int 256) tb))
+;; 			    (- (sum b^) ((_ bv2int 256) tb^))))))))
 
 (check-sat)
 ;; z3> unsat

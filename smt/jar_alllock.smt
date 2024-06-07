@@ -6,6 +6,7 @@
 (define-sort BUINT () (_ BitVec 256)) ; bounded 256bit unsigned integer
 (define-sort M () (Array A BUINT)) ;mapping from address to Int
 (declare-fun P_alpha (M Bool A BUINT BUINT M Bool A BUINT BUINT Int) Bool)
+(declare-fun P_1 (M Bool A BUINT BUINT M Bool A BUINT BUINT Int) Bool)
 (declare-fun P_omega (M Bool A BUINT BUINT M Bool A BUINT BUINT Int) Bool)
 (declare-fun Q_alpha (M Bool A BUINT BUINT M Bool A BUINT BUINT Int) Bool)
 (declare-fun Q_0 (M Bool A BUINT BUINT M Bool A BUINT BUINT Int) Bool)
@@ -36,6 +37,13 @@
  (forall ((b M) (l_b M) (lock Bool) (l_lock Bool) (s A) (l_s A) (v BUINT) (l_v BUINT)
 	  (l_r Int) (tb BUINT) (l_tb BUINT) (l_b^ M))
 	 (=> (and (P_alpha b lock s v tb l_b l_lock l_s l_v l_tb l_r)
+		  (not l_lock))
+	     (P_1 b lock s v tb l_b^ l_lock l_s l_v l_tb l_r))))
+
+(assert
+ (forall ((b M) (l_b M) (lock Bool) (l_lock Bool) (s A) (l_s A) (v BUINT) (l_v BUINT)
+	  (l_r Int) (tb BUINT) (l_tb BUINT) (l_b^ M))
+	 (=> (and (P_1 b lock s v tb l_b l_lock l_s l_v l_tb l_r)
 		  (= l_b^ (store l_b l_s (bvadd (select l_b l_s) l_v)))
 		  (bvule (select l_b l_s) (select l_b^ l_s))
 		  (bvule l_v (select l_b^ l_s)))
@@ -204,8 +212,7 @@
 		    (not (and (= b^ b_^)
 			      (= lock^ lock_^)
 			      (= tb^ tb_^)))))))
- 
+
 (check-sat)
 ;; z3> unsat
 
-(get-proof)
