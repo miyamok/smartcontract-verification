@@ -216,7 +216,7 @@ A commonly suggested cure for the vulnerability is to make use of mutex to prohi
 
 ### Formal modeling
 
-We give formal models of Jar.sol and its variants which are free from the reentrancy vulnerability.  We use the Horn clause-based framework which is same as one employed by the official solc compiler for its built-in formal verification.
+We give formal models of Jar.sol and its variants which are free from the reentrancy vulnerability.  We use the Horn clause-based framework which is same as one employed by the official solc compiler for its built-in formal verification [[1]](#1) [[2]](#2).
 The aim of our formal modeling is:
 
 1. To do verification without relying on explicit assertions in source codes which have to be done by a programmer with security knowledges, and
@@ -357,7 +357,7 @@ There are two new things, one of which is just a new function bvsub for the subt
 ```
 In general, an unknown external function can make arbitrary several calls to the public functions of the jar contract.  The idea is to model such a sequence of transitions through an external behavior of the jar contract.  For the jar contract, Ext is defined as a boolean valued function which takes four arguments.  The first two represents a state which consists of b and tb, i.e. the public state variable balance and the amount of native crypto-asset of the jar contract.  In principle, we should enumerate all publicly available data of the contract relevant to the formal analysis.  The other two arguments represent a possible future state as a result of a sequence of transitions, which consists of function calls to deposit() and withdraw().
 
-Now we are able to discuss the Horn clause of Q_3 (copied below)
+Now we are able to discuss the Horn clause of Q_3 (same as above)
 ```
 (assert
  (forall ((b M) (l_b M) (l_b^ M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
@@ -370,11 +370,47 @@ Now we are able to discuss the Horn clause of Q_3 (copied below)
 ```
 This models that l_b and l_tb came from Q_2 goes to any l_b^ and l_tb^ satisfying Ext l_b l_tb l_b^ l_tb^, that means the state of l_b and l_tb goes to another state of l_b^ and l_tb^ due to a sequence of transitions.
 
-TO DO: model of the contract, security property.
+Considering the lifetime of the contract, it has the initial state and the state changes through transactions.  This is modeled by Init and Jar as follows, assuming zeros is an empty mapping (all values are zero).  tb is arbitrary and represents that it may receive any amount of native asset through the deployment, as the constructor is payable.  Jar represents the contract's state, which is modeled as a tree whose root is of the initial state, and branches are formed due to one step transition without a revert.
+```
+(assert (forall ((tb BUINT)) (Init zeros tb)))
+
+;; Jar
+(assert (forall ((b M) (tb BUINT)) (=> (Init b tb) (Jar b tb))))
+
+(assert
+ (forall ((b M) (s A) (v BUINT) (tb BUINT) (b^ M) (tb^ BUINT) (r Int))
+	 (=> (and (Jar b tb)
+		  (T b tb s v b^ tb^ r)
+		  (= r 0))
+	     (Jar b^ tb^))))
+
+(assert
+ (forall ((b M) (s A) (v BUINT) (tb BUINT) (b^ M) (tb^ BUINT) (r Int))
+	 (=> (and (Jar b tb)
+		  (S b tb s v b^ tb^ r)
+		  (= r 0))
+	     (Jar b^ tb^))))
+```
+Here we are at the last step of formal modeling, that is to give the security property to detect the reentrancy vulnerability.
+```
+(assert
+ (forall ((b M) (tb BUINT) (s A) (v BUINT)
+ 	  (b^ M) (tb^ BUINT) (r^ Int) (r_^ Int)
+	  (b_^ M) (tb_^ BUINT))
+  	  (not (and (Jar b tb)
+		    (T b tb s v b^ tb^ r^)
+		    (T b tb s v b_^ tb_^ r_^)
+		    (= r^ 0)
+		    (= r_^ 0)
+		    (not (and (= b^ b_^) (= tb^ tb_^)))))))
+```
+This models that the result of a call to withdraw() is deterministic.  In case this property is violated, the SMT solver answers unsat and gives a proof log showing that there are two distinct results although the function call has started from the identical situation, the state (b, tb), by the caller s, the amount of sent native currency v and no revert.
+
+### Experiment
 
 ### Implementation
 
-TODO 
+TODO: automatically generate a model and a security property for a given source code, so that a theorem prover practices formal verification.
 
 ### Notes
 
@@ -622,3 +658,13 @@ TypeError: Cannot read properties of undefined (reading 'equal')
 It is further to investigate why the suggestion doesn't work.
 
 chai.js@5 is still new and seems not very stable.  A discussion is found at https://github.com/chaijs/chai/issues/1561 .
+
+## References
+
+<a id="1">[1]</a> 
+Leonardo Alt, Martin Blicha, Antti E. J. Hyvärinen, Natasha Sharygina:
+SolCMC: Solidity Compiler's Model Checker. CAV (1) 2022: 325-338
+
+<a id="2">[2]</a> 
+Matteo Marescotti, Rodrigo Otoni, Leonardo Alt, Patrick Eugster, Antti E. J. Hyvärinen, Natasha Sharygina:
+Accurate Smart Contract Verification Through Direct Modelling. ISoLA (3) 2020: 178-194
