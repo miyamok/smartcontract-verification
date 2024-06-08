@@ -224,7 +224,7 @@ The aim of our formal modeling is:
 
 Currently (as of June 2024) solc doesn't offer a feature automatically to detect reentrancy vulnerability without explicit assertions in source code.
 
-We describe how the above mentioned Jar contract should be modeled in Horn clauses.  The code below follows STDLIB2 format which theorem provers such as Z3 accepts as input.  The modeling of the contract follows existing research papers.
+We describe how the above mentioned Jar contract should be modeled in Horn clauses.  The code below follows SMTLIB2 format which theorem provers such as Z3 accepts as input.  The modeling of the contract follows existing research papers.
 
 We use following custom sorts for address, uint, and mapping(address=>uint).
 ```
@@ -281,11 +281,96 @@ For this deposit(), 2 such states suffice, and hence we have two functions P_alp
 Let's see what the arguments of P_alpha and P_omega are.  b models the state variable balance of type mapping(address=>uint), s models the address of the sender, v models a value sent from the sender to this contract for the call to deposit(), and tb models the balance of the native cryptocurrency owned by this contract (standing for this.balance).
 The original values of these variables b, s, v, and tb will be updated in the summary S only when the function call is over without reverting.  The variables with the prefix l_ are used for temporal memory for changes throughout an execution, and used to update states or discarded in case of a revert.  P_alpha is in charge of initialization.  l_b, l_s, l_v, and l_tb are initialized by the corresponding values in P_alpha.  Note that deposit() is a payable function and the balance of this contract is increased by msg.value, that is modeled by the equational constraints on tb etc. where overflow is also handled properly.  Here, bvadd is a function for addition of bitvectors, and bvule is the less than relation taking bitvectors as unsigned integers.
 l_r is a temporal memory for the revert status, which is set to 0 (no error) in P_alpha.
-The function deposit() consists of just one line.  After executing this line, we have a transition from P_alpha to P_omega.  The equational constraint comes straightforwardly to describe the state after the execution.
+The function deposit() consists of just one line.  After executing this line, we have a transition from P_alpha to P_omega.  The equational constraint comes straightforwardly to describe the state after the execution.  Here we use arithmetic for arrays, that involves operations select and store.  select takes two arguments, an array and an index, and returns a value at the index.  store takes three arguments, an array, an index, and a value, and returns a new array where the value at the index has been updated to be the given value.
 The balance (a shared variable, not the native crypto of the contract) of the sender is increased by the sent value from a caller.  Note that overflow is handled as well.
 S is to check whether the function execution reached its end, P_omega, with any revert or not, and in case there is a revert, i.e. l_r is non-zero, it restores the original states, and otherwise, it updates states by l_ prefixed-variables.
+The arguments b^ and bt^ are in charge of the states when the execution is over.
 
-TO DO: model of withdraw(), model of the contract, security property.
+Let's move on to the model of withdraw().
+```
+(assert
+ (forall ((b M) (l_b M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT))
+	 (=> (and (= b l_b) (= s l_s) (= v l_v) (= l_r 0) (= l_tb tb))
+	     (Q_alpha b s v tb l_b l_s l_v l_tb l_r))))
+
+(assert
+ (forall ((b M) (l_b M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT))
+	 (=> (and (Q_alpha b s v tb l_b l_s l_v l_tb l_r)
+		  (not (= (select l_b l_s) buint0)))
+	     (Q_1 b s v tb l_b l_s l_v l_tb l_r))))
+
+(assert
+ (forall ((b M) (l_b M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT) (l_tb^ BUINT))
+	 (=> (and (Q_1 b s v tb l_b l_s l_v l_tb l_r)
+		  (= l_tb^ (bvsub l_tb (select l_b l_s)))
+		  (bvule (select l_b l_s) l_tb))
+	     (Q_2 b s v tb l_b l_s l_v l_tb^ l_r))))
+
+(assert
+ (forall ((b M) (l_b M) (l_b^ M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT) (l_tb^ BUINT) (b^ M) (tb^ BUINT) (b^^ M) (tb^^ BUINT))
+	 (=> (and (Q_2 b s v tb l_b l_s l_v l_tb l_r)
+		  (and (Ext b^ tb^ b^^ tb^^)
+		       (= b^ l_b) (= b^^ l_b^)
+		       (= tb^ l_tb) (= tb^^ l_tb^)))
+	     (Q_3 b s v tb l_b^ l_s l_v l_tb^ l_r))))
+
+(assert
+ (forall ((b M) (l_b M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT) (l_b^ M))
+	 (=> (and (Q_3 b s v tb l_b l_s l_v l_tb l_r)
+		  (= l_b^ (store l_b l_s buint0)))
+	     (Q_omega b s v tb l_b^ l_s l_v l_tb l_r))))
+
+
+(assert
+ (forall ((b M) (l_b M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT) (b^ M) (tb^ BUINT) (r Int))
+	 (=> (and (Q_omega b s v tb l_b l_s l_v l_tb l_r)
+		  (=> (not (= l_r 0)) (and (= b^ b) (= tb^ tb)))
+		  (=> (= l_r 0) (and (= b^ l_b) (= tb^ l_tb)))
+		  (= r l_r))
+	     (T b tb s v b^ tb^ r))))
+```
+Q_alpha is for the initial step.  Q_1 comes after the condition <code>balance[msg.sender] != 0</code> is true.  We model the next line of call() as two steps, where the first one is to send the native currency by Q_2 and the second is to process the call value by Q_3.  For simplicity we assume that the call() is always successful.  It is harmless to do so because in case call() is not successful, it is reverted by require().  Note that we should explicitly handle a revert if assert() was used here instead of require().  Q_omega comes after the last line <code>balance[msg.sender] = 0;</code>.  T is a summary for withdraw().
+
+There are two new things, one of which is just a new function bvsub for the subtraction in bitvectors.  The other new thing is a model of an external behavior of the jar contract, that is crucial to handle a call to an unknown external contract, which is for this case a contract of the address msg.sender.
+```
+(assert (forall ((b M) (tb BUINT)) (Ext b tb b tb)))
+
+(assert (forall ((b M) (s A) (v BUINT) (r Int)
+		 (tb BUINT) (b^ M) (tb^ BUINT) (b^^ M) (tb^^ BUINT))
+		(=> (and (Ext b tb b^ tb^)
+			 (S b^ tb^ s v b^^ tb^^ r)
+			 (= r 0))
+		    (Ext b tb b^^ tb^^))))
+
+(assert (forall ((b M) (s A) (v BUINT) (r Int)
+		 (tb BUINT) (b^ M) (tb^ BUINT) (b^^ M) (tb^^ BUINT))
+		(=> (and (Ext b tb b^ tb^)
+			 (T b^ tb^ s v b^^ tb^^ r)
+			 (= r 0))
+		    (Ext b tb b^^ tb^^))))
+```
+In general, an unknown external function can make arbitrary several calls to the public functions of the jar contract.  The idea is to model such a sequence of transitions through an external behavior of the jar contract.  For the jar contract, Ext is defined as a boolean valued function which takes four arguments.  The first two represents a state which consists of b and tb, i.e. the public state variable balance and the amount of native crypto-asset of the jar contract.  In principle, we should enumerate all publicly available data of the contract relevant to the formal analysis.  The other two arguments represent a possible future state as a result of a sequence of transitions, which consists of function calls to deposit() and withdraw().
+
+Now we are able to discuss the Horn clause of Q_3 (copied below)
+```
+(assert
+ (forall ((b M) (l_b M) (l_b^ M) (s A) (l_s A) (v BUINT) (l_v BUINT) (l_r Int)
+	  (tb BUINT) (l_tb BUINT) (l_tb^ BUINT) (b^ M) (tb^ BUINT) (b^^ M) (tb^^ BUINT))
+	 (=> (and (Q_2 b s v tb l_b l_s l_v l_tb l_r)
+		  (and (Ext b^ tb^ b^^ tb^^)
+		       (= b^ l_b) (= b^^ l_b^)
+		       (= tb^ l_tb) (= tb^^ l_tb^)))
+	     (Q_3 b s v tb l_b^ l_s l_v l_tb^ l_r))))
+```
+This models that l_b and l_tb came from Q_2 goes to any l_b^ and l_tb^ satisfying Ext l_b l_tb l_b^ l_tb^, that means the state of l_b and l_tb goes to another state of l_b^ and l_tb^ due to a sequence of transitions.
+
+TO DO: model of the contract, security property.
 
 ### Implementation
 
