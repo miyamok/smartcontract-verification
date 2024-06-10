@@ -404,9 +404,72 @@ Here we are at the last step of formal modeling, that is to give the security pr
 		    (= r_^ 0)
 		    (not (and (= b^ b_^) (= tb^ tb_^)))))))
 ```
-This models that the result of a call to withdraw() is deterministic.  In case this property is violated, the SMT solver answers unsat and gives a proof log showing that there are two distinct results although the function call has started from the identical situation, the state (b, tb), by the caller s, the amount of sent native currency v and no revert.
+This models that the result of a call to withdraw() is deterministic.  In case this property is violated, the SMT solver answers unsat and gives a proof log showing that there are two distinct results although the function call has started from the identical situation, the state (b, tb), by the caller s, the amount of sent native currency v, and has ended without a revert.
+
+This security proprty is not very optimal in the sense that it causes false positive in the detection of the reentrancy vulnerability.  For example, it is better to make use of an invariance concerning the balances.  However, we employ the above mentioned assertion due to the following reasons.
+
+- Generation of an invariance is not straightforward in a general case.  We prefer to leave it for future work
+- We have faced a limit of computational power of the machine in case the assertion makes use of an invariance (still non-terminating in half a day of Z3 execution).  We should keep the problem manageable in seconds.
 
 ### Experiment
+
+We are going to see how to practice formal verification by means of an SMT solver, that requires some optimization and modification due to a computational limitation etc.  At the end, we managed to get an evidence showing that our jar contract is indeed vulnerable due to reentrancy as follows:
+
+- Assume the contract has the state ([1], 3), meaning that an account (say the account 0) has its deposit which amounts to 1 and the asset balance of the jar contract amounts to 3.
+- Distinct transactions may happen when the account 0 calls withdraw():
+    - the state of the contract ends up with ([0], 1)
+    - the state of the contract ends up with ([0], 2)
+- Although withdraw() is supposed to pay back to the caller the exact amount of the deposit, that is 1, the contract may pay back 2.
+- This divergence comes from two distinct external behaviors, to ([0], 1) and to ([1], 2) from the state ([1], 2), are possible through a call to <code>msg.sender.call()</code> in <code>withdraw()</code>.
+
+We will discuss the details of 
+Executing Z3 for the model and the security property mentioned above, I didn't get an answer from Z3 in a reasonable time consumption (after half a day, I gave up).
+The following version of the definition of Init enabled me to get an answer in a few seconds.
+```
+(assert (forall ((b M) (tb BUINT)) (=> (Init b tb) (Jar b tb))))
+```
+Contrary to the source code, this new model allows any balance at the deployment.  Although the initial balance should be all zero, and updates of the balance should be done by the functions deposit() and withdraw(), it seems computationally too demanding and not practicable.  This modification is benign to our purpose, and we accept it for this moment to get a result.
+
+Another modification was limiting the size of the array, balance, and the maximal number for the uint to small numbers.  This means that we assume the number of users is small and also assume our system allows only small numbers for representing the amount of asset.  It is also benign for our purpose, that is, to detect the vulnerability.
+In order to let the size of the balance array small, we give a custom definition for A, the data sort for the accounts.  For example, the following unit sort, namely, a singleton sort,
+```
+(declare-datatypes () ((Unit unit)))
+(define-sort A () Unit)
+```
+is used to represent the case there is only one account holder in our system.
+For the asset, we used the bitvector of length 2 representing numbers {0, 1, 2, 3}.
+
+### Unsatisfiability proof
+
+Z3 provides the following proof of unsatisfiability in seconds.
+```
+((set-logic HORN)
+(declare-fun query!0 ((Array Unit (_ BitVec 2)) (_ BitVec 2) Unit (_ BitVec 2) (Array Unit (_ BitVec 2)) (_ BitVec 2) Int Int (Array Unit (_ BitVec 2)) (_ BitVec 2)) Bool)
+(proof
+(let ((?x2247 ((as const (Array Unit (_ BitVec 2))) (_ bv0 2))))
+(let ((?x2347 (store ?x2247 unit (_ bv1 2))))
+(let (($x2931 (query!0 ?x2347 (_ bv3 2) unit (_ bv0 2) ?x2247 (_ bv1 2) 0 0 ?x2247 (_ bv2 2))))
+(let (($x534 (forall ((A (Array Unit (_ BitVec 2))) (B (_ BitVec 2)) )(Ext A B A B))))
+(let ((@x3083 (asserted $x534)))
+(let ((@x3082 ((_ hyper-res 0 0) @x3083 (Ext ?x2347 (_ bv2 2) ?x2347 (_ bv2 2)))))
+(let (($x953 (forall ((A (Array Unit (_ BitVec 2))) (B Unit) (C (_ BitVec 2)) (D (_ BitVec 2)) (E (Array Unit (_ BitVec 2)))
+                       (F (_ BitVec 2)) (G (Array Unit (_ BitVec 2))) (H (Array Unit (_ BitVec 2))) (I (_ BitVec 2)) )
+                     (let (($x951 (and (Ext H I A C) (Ext A D E F) (not (= (select A B) (_ bv0 2))) (= D (bvadd C (bvmul (_ bv3 2) (select A B))))
+                        (= G (store E B (_ bv0 2))) (bvule (select A B) C))))
+           (=> $x951 (Ext H I G F))))
+ ))
+ (let ((@x2953 ((_ hyper-res 0 0 0 1 0 2) (asserted $x953) @x3082 ((_ hyper-res 0 0) @x3083 (Ext ?x2347 (_ bv1 2) ?x2347 (_ bv1 2))) (Ext ?x2347 (_ bv2 2) ?x2247 (_ bv1 2)))))
+      (let (($x999 (forall ((A (Array Unit (_ BitVec 2))) (B Unit) (C (_ BitVec 2)) (D (_ BitVec 2)) (E (_ BitVec 2)) (F (Array Unit (_ BitVec 2)))
+                            (G (_ BitVec 2)) (H (Array Unit (_ BitVec 2))) (I (_ BitVec 2)) (J (Array Unit (_ BitVec 2))) (K (_ BitVec 2)) (L (Array Unit (_ BitVec 2))) )
+                           (let (($x997 (and (Ext A I J K) (Ext A E F G) (not (= (select A B) (_ bv0 2))) (= E (bvadd D (bvmul (_ bv3 2) (select A B))))
+                                             (= I (bvadd D (bvmul (_ bv3 2) (select A B)))) (= H (store F B (_ bv0 2))) (= L (store J B (_ bv0 2)))
+                                             (or (not (= L H)) (not (= K G))) (bvule (select A B) D))))
+                                (=> $x997 (query!0 A D B C L K 0 0 H G)))) ))
+           (mp ((_ hyper-res 0 0 0 1 0 2) (asserted $x999) @x2953 @x3082 $x2931) (asserted (=> $x2931 false)) false))))))))))))
+```
+We are going to read off that it demonstrates the above mentioned divergent behaviors.
+
+TODO: describe how to read off information from the unsatisfiability proof
 
 ### Implementation
 
@@ -414,7 +477,8 @@ TODO: automatically generate a model and a security property for a given source 
 
 ### Notes
 
-TODO
+- getting proof trees from Spacer (https://github.com/Z3Prover/z3/issues/4863)
+- proof rules documented (https://github.com/Z3Prover/z3/blob/master/src/api/z3_api.h#L765)
 
 <!-- 1. There is a function, which not only allows reentrancy but also makes a money transfer to some address which may be a smart contract created by somebody.  (May be viewed as a special case of the 2. below.)
 2. In this function, preconditions to the money transfer may be satisfied in a recursive call.
