@@ -53,7 +53,7 @@ The following lines check that
 + the status of the order indicates that the payment is still awaited.
 
 The last step of the function is the assignment.
-As described above, the local variable <code>order</code> is pointing <code>orders[key]</code>, and <code>orders[key].status</code> gets the new value <code>OrderStatus.Paid</code>.
+As described above, the local variable <code>order</code> is pointing to <code>orders[key]</code>, and <code>orders[key].status</code> gets the new value <code>OrderStatus.Paid</code>.
 This change is persistent, and in the future one can see that the payment has been completed.
 
 Another function <code>paymentForgetful</code> has a problem, although it looks similar as <code>payment</code>.
@@ -441,7 +441,7 @@ For the asset, we used the bitvector of length 2 representing numbers {0, 1, 2, 
 
 ### Unsatisfiability proof
 
-Z3 provides the following proof of unsatisfiability in seconds.
+Z3 provides the following proof of unsatisfiability in seconds.  We are going to read off that it demonstrates the above mentioned divergent behaviors.
 ```
 ((set-logic HORN)
 (declare-fun query!0 ((Array Unit (_ BitVec 2)) (_ BitVec 2) Unit (_ BitVec 2) (Array Unit (_ BitVec 2)) (_ BitVec 2) Int Int (Array Unit (_ BitVec 2)) (_ BitVec 2)) Bool)
@@ -467,9 +467,86 @@ Z3 provides the following proof of unsatisfiability in seconds.
                                 (=> $x997 (query!0 A D B C L K 0 0 H G)))) ))
            (mp ((_ hyper-res 0 0 0 1 0 2) (asserted $x999) @x2953 @x3082 $x2931) (asserted (=> $x2931 false)) false))))))))))))
 ```
-We are going to read off that it demonstrates the above mentioned divergent behaviors.
+The proof begins with the specification of the logic, that is HORN as we specified in the original model definition.
+The function <code>query!0</code> is declared to have arguments of the sorts which are exactly same as the sorts of the universally quantified variables of the last assertion, the security property, in our model.  This function <code>query!0</code> is boolean valued, and this boolean value is meant to stand for the negation of the security property.  Recall that our unsatisfiability proof is an evidence of the fact that the negation of the security property holds under the condition that all the other assertions hold.  The negation of the security property is logically equivalent to an existential formula (due to the duality of the quantifiers), hence it suffices for Z3 to find concrete instantiation of those quantified variables of the security property to carry out the proof, which involves information on the divergent behaviors of the smart contract.
 
-TODO: describe how to read off information from the unsatisfiability proof
+The next line opens the proof object.
+We see a sequence of definitions due to <code>let</code> construct.
+Variables with the prefix <code>?</code> points to data such as a mapping and a bitvector.  Also, the prefix <code>$</code> means a variable pointing to a boolean and <code>@</code> a proof.  The mapping is of the sort <code>Array Unit (_ BitVec 2)</code>, that is a mapping from the singleton to the bitvector of length 2.  Note that the singleton value is unique, and hence this mapping is isomorphic to the bitvector of length 2.  For brevity, we sometimes take this mapping just as a bitvector in the description below.
+
+<code>?x2247</code> points to the balance whose value is constantly 0.  Here, <code>(_ bv0 2)</code> is 0 of the sort bitvecor of length 2.  We denote it as <code>[0]</code>.
+
+<code>?x2347</code> is an array obtained by updating the 0th element (indicated by unit) of it to be 1, which <code>(_ bv1 2)</code> represents.  We denote it as <code>[1]</code>.
+
+<code>$x2931</code> is a boolean value obtained by feeding to the function <code>query!0</code> the values <code>([1], 3, unit, 0, [0], 1, 0, 0, [0], 2)</code>, which is taken as a formula.  Those arguments are instances of universally quantified variables in the security property, and it looks as follows.
+```
+not (Jar([1], 3)
+     & T([1], 3, unit, 0, [0], 1, 0)
+     & T([1], 3, unit, 0, [0], 2, 0)
+     & 0=0
+     & 0=0
+     & not ([0] = [0] & 1 = 2))
+```
+It is now clear that this proof is considering the case when the contract's status is <code>([1], 3)</code>; the balance <code>[1]</code> indicates that the 0th account holder has the deposit which amounts to 1, and the asset of the contract amounts to 3.  It is apparently true because we have the assertion which makes Jar hold for an arbitrary state.  Also, there are two transitions by <code>withdraw()</code> function.  One makes the state of the contract <code>([0], 1)</code> and the other makes <code>([0], 2)</code> without no revert, as the 7th argument of T which stands for the revert flag is 0 in the both cases.  Because <code>1=2</code> in the above formula is false, the last conjunct is true.  Note that a proof of falsity is desired in our unsatisfiability proof.  We are going to check that the two formulas of <code>T</code> are both shown true in the proof, then the negation of true, ie. false, is proven.
+
+<code>$x534</code> is a formula <code>forall A, B(Ext(A, B, A, B))</code>.
+
+<code>@x3083</code> is defined to point to the proof claiming <code>$x534</code>.
+Due to our assertion on Ext, the formula <code>$x534</code> is apparently true.  The operator <code>asserted</code> makes a valid proof object of the formula from available assertions. 
+
+<code>@x3082</code> is a proof of <code>Ext([1], 2, [1], 2)</code> obtained by the resolution method applied to <code>@x3083</code>.  The operator <code>(_ hyper-res ...)</code> is taking several arguments.  The first one is an already existing proof, and the last one is the desired conclusion obtained by applying resolution to the given proof.  Further arguments come inbetween, when there are additional proofs to supply for resolution.
+
+<code>$x953</code> is a Horn clause, as all the other formulas are, where its body is a conjunction defined as <code>$x951</code> and the head is <code>Ext(H, I, G, F)</code>, which looks as follows, omitting universal quantifier over A, B, ..., H, and I.
+```
+ (Ext(H, I, A, C)
+& Ext(A, D, E, F)
+& not (select A B = 0)
+& D = C + 3 * select A B
+& G = store E B 0
+& select A B <= C) => Ext(H, I, G, F)
+```
+Here, <code><=</code> stands for the arithmetical less than or equal to, and <code>=></code> stands for the logical implication.
+
+<code>@x2953</code> is a proof of <code>Ext([1], 2, [0], 1)</code>.  It is obtained by resolution applied to four arguments.  The first one, <code>(asserted $x953)</code> is a proof of the formula <code>$x953</code> due to assertions.  The solver uses assertions concerning Q_alpha, Q_1, Q_2, Q_3, Q_omega, T, and Ext to carry it out.  The last argument is <code>Ext([1], 2, [0], 1)</code> which is the conclusion of this proof <code>@x2953</code>.  In order to obtain this conclusion, the solver also uses the second and the third arguments which are proofs of the non-trivial conjuncts of the body of the formula <code>$x953</code>, namely, <code>Ext(H, I, A, C)</code> and <code>Ext(A, D, E, F)</code>.  The first one is a direct use of <code>@x3082</code>, and we now see <code>Ext(H, I, A, C)</code> is <code>Ext([1], 2, [1], 2)</code>.  On the other hand, <code>((_ hyper-res 0 0) @x3083 (Ext ?x2347 (_ bv1 2) ?x2347 (_ bv1 2)))</code> has the conclusion <code>Ext([1], 1, [1], 1)</code> which comes by a simple instantiation of <code>@x3083</code> due to resolution.
+
+Due to the arguments so far, we have seen both <code>Ext([1], 2, [1], 2)</code> and <code>Ext([1], 2, [0], 1)</code> are proven.  From the state <code>([1], 2)</code> there are two distinct external behaviors, where one goes to the identical state <code>([1], 2)</code> and the other goes to <code>([0], 1)</code>.  It is indeed the cause of the vulnerability.
+
+<code>$x999</code> is a formula, which is a universally quantified Horn clause.
+The kernel of the quantifier is of the form <code>$x997 => (query!0 A D B C L K 0 0 H G)</code>.
+
+<code>$x997</code> is the body of the Horn clause <code>$x999</code>.
+```
+  Ext(A, I, J, K)
+& Ext(A, E, F, G)
+& not (select A B = 0)
+& (E = D + 3 * (select A B))
+& (I = D + 3 * (select A B))
+& (H = store F B 0)
+& (L = store J B 0)
+& (not (L = H) | not (K = G))
+& (select A B <= D)
+```
+Now we come to the final steps of the whole proof, which derives by modus ponens <code>mp</code> falsum from the proof of <code>$x2931</code> and the proof of its negation, ie. <code>$x2931 => false</code>.  The latter one is indeed corresponding to the double negated goal formula of ours in the original SMT script.
+The former proof is due to resolution.  The first argument is a proof of <code>$x999</code>.  Recall that <code>query!0</code> is a boolean valued function, and this boolean value is meant for the negation of the security property.  In order to prove it, it suffices to prove the conjunction formula inside the kernel of the security property formula.
+```
+  Jar b tb
+& T b tb s v b^ tb^ r^
+& T b tb s v b_^ tb_^ r_^
+& r^ = 0
+& r_^ = 0
+& not ((b^ = b_^) & (tb^ = tb_^))
+```
+Then, to prove <code>query!0 A D B C L K 0 0 H G</code>, the head of the Horn clause <code>$x999</code>, it suffices to prove the corresponding instantiation of the above conjunction, that is,
+```
+  Jar A D
+& T A D B C L K 0
+& T A D B C H G 0
+& 0 = 0
+& 0 = 0
+& not ((L = H) & (K = G))
+```
+which is straightforwardly implied from the conjunction formula <code>$x997</code> by means of the assertions concerning Jar, T, Q_1, Q_2, Q_3, and Q_omega in our model.  By resolution, the body of the Horn clause <code>$x999</code> is all proven, thanks to the additionally supplied proofs <code>@x2953</code> and <code>@x3082</code>, which respectively claim <code>Ext([1], 2, [0], 1)</code> and <code>Ext([1], 2, [1], 2)</code>, and it gives a proof of <code>$x2931</code>, that is <code>query!0([1], 3, unit, 0, [0], 1, 0, 0, [0], 2)</code>.
+It means that there are two diverging transactions as mentioned at the beginning of this section, and moreover it contradits the asserted security property.
 
 ### Implementation
 
@@ -644,7 +721,7 @@ the nodeType of this statement is RevertStatement.
 
 ## Proxy contract
 
-<code>delegatecall</code> is a function available for Contract.  It is to call a function of some contract on chain, delegating to the contract the parameters, such as msg.sender, the context etc.  A typical use case of this feature is to give a possibility of upgrading of smart contracts.  In the simplest scenario, Instead of a single smart contract, one creates two contracts, they are so-called the logic contract and the proxy contract.  The logic contract is in charge of the implementation of a business logic which could be upgraded in the future.  The proxy contract has a state variable which keeps the address of the implementation contract, and it invokes the corresponding business logic via <code>delegatecall</code>.  Upgrading of the business logic is done in two steps: deploying the new logic contract and changing the state variable of the proxy contract so that it points the new contract.
+<code>delegatecall</code> is a function available for Contract.  It is to call a function of some contract on chain, delegating to the contract the parameters, such as msg.sender, the context etc.  A typical use case of this feature is to give a possibility of upgrading of smart contracts.  In the simplest scenario, Instead of a single smart contract, one creates two contracts, they are so-called the logic contract and the proxy contract.  The logic contract is in charge of the implementation of a business logic which could be upgraded in the future.  The proxy contract has a state variable which keeps the address of the implementation contract, and it invokes the corresponding business logic via <code>delegatecall</code>.  Upgrading of the business logic is done in two steps: deploying the new logic contract and changing the state variable of the proxy contract so that it points to the new contract.
 
 ### Question
 What happens if the implementation has been changed after the moment one called the proxy and before the moment the contract is actually executed.  If this change of the implementation is not detected, the contract can run differently from what is expected at the time to initiate the transaction, that arise a security concern.
