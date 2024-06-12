@@ -118,7 +118,7 @@ Person storage p = vip;
 ```
 Although there can be several different formal semantics of Solidity language, one possible interpretation of the above example is that the right hand side of the assignment, <code>vip</code>, denotes something different between the two.
 In the first example, <code>vip</code> denotes the copy of the data which we can refer by <code>vip</code>, and in the second, <code>vip</code> denotes the storage location of itself.
-# To do
+<!-- # To do -->
 <!--
 - Explaining basic logic and the satisfiability problem
 - Write about <code>require</code> and <code>assert</code>.
