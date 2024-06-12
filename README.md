@@ -128,6 +128,10 @@ In the first example, <code>vip</code> denotes the copy of the data which we can
 ## Reentrancy analysis
 
 The vulnerability due to reentrancy is a major security problem of smart contract.
+We practice formal verification by means of SMT solver concerning this security problem.
+
+- Solidity code of the vulnerable smart contract and the attacker ([reentrancy.sol](sample-solidity/reentrancy.sol))
+- SMTLIB2 model of the vulnerable smart contract and the security property ([jar.smt](smt/jar.smt))
 
 ### Example of reentrancy attack
 
