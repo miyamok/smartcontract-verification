@@ -356,13 +356,3 @@ TypeError: Cannot read properties of undefined (reading 'equal')
 It is further to investigate why the suggestion doesn't work.
 
 chai.js@5 is still new and seems not very stable.  A discussion is found at https://github.com/chaijs/chai/issues/1561 .
-
-## References
-
-<a id="1">[1]</a> 
-Leonardo Alt, Martin Blicha, Antti E. J. Hyvärinen, Natasha Sharygina:
-SolCMC: Solidity Compiler's Model Checker. CAV (1) 2022: 325-338
-
-<a id="2">[2]</a> 
-Matteo Marescotti, Rodrigo Otoni, Leonardo Alt, Patrick Eugster, Antti E. J. Hyvärinen, Natasha Sharygina:
-Accurate Smart Contract Verification Through Direct Modelling. ISoLA (3) 2020: 178-194
